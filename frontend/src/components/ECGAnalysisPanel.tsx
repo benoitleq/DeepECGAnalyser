@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   getAvailableECGModels,
   runFullECGAnalysis,
-  runBatchECGAnalysis,
   BatchECGAnalysisResponse,
+  BatchECGResult,
+  FullECGAnalysisResponse,
 } from '../api';
 import ModelSelector, { ECGModel } from './ModelSelector';
 import ECGVisualResults, { FullECGAnalysisResult } from './ECGVisualResults';
@@ -34,6 +35,14 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   // Batch results
   const [batchResults, setBatchResults] = useState<BatchECGAnalysisResponse | null>(null);
   const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+
+  // Batch progress tracking
+  const [batchProgress, setBatchProgress] = useState<{
+    current: number;
+    total: number;
+    currentFile: string;
+    fileStatuses: Array<'pending' | 'processing' | 'success' | 'error'>;
+  } | null>(null);
 
   // Pipeline options
   const [useGpu, setUseGpu] = useState(true);
@@ -402,26 +411,80 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   };
 
   const handleAnalyze = async () => {
-    // Batch mode
+    // Batch mode - process files one by one with progress tracking
     if (batchMode && selectedFiles.length > 0) {
       setIsAnalyzing(true);
       setError(null);
       clearAllResults();
 
-      try {
-        const modelsToRun = selectedFullModels.length > 0 ? selectedFullModels : ['all'];
-        const response = await runBatchECGAnalysis(
-          selectedFiles,
-          modelsToRun,
-          useGpu
-        );
-        setBatchResults(response);
-        setCurrentBatchIndex(0);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Échec de l'analyse par lot");
-      } finally {
-        setIsAnalyzing(false);
+      const modelsToRun = selectedFullModels.length > 0 ? selectedFullModels : ['all'];
+      const statuses: Array<'pending' | 'processing' | 'success' | 'error'> = selectedFiles.map(() => 'pending');
+      setBatchProgress({
+        current: 0,
+        total: selectedFiles.length,
+        currentFile: selectedFiles[0].name,
+        fileStatuses: [...statuses],
+      });
+
+      const allResults: BatchECGResult[] = [];
+      let successCount = 0;
+      let failCount = 0;
+      const startTime = Date.now();
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        // Mark current file as processing
+        statuses[i] = 'processing';
+        setBatchProgress({
+          current: i,
+          total: selectedFiles.length,
+          currentFile: selectedFiles[i].name,
+          fileStatuses: [...statuses],
+        });
+
+        try {
+          const response: FullECGAnalysisResponse = await runFullECGAnalysis(
+            selectedFiles[i],
+            modelsToRun,
+            useGpu
+          );
+          statuses[i] = response.success ? 'success' : 'error';
+          allResults.push({
+            index: i,
+            filename: selectedFiles[i].name,
+            patient_id: response.patient_id,
+            success: response.success,
+            result: response,
+            error: response.error,
+          });
+          if (response.success) successCount++; else failCount++;
+        } catch (err) {
+          statuses[i] = 'error';
+          allResults.push({
+            index: i,
+            filename: selectedFiles[i].name,
+            patient_id: '',
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          failCount++;
+        }
+
+        // Update batch results incrementally (UI refreshes after each file)
+        setBatchResults({
+          success: true,
+          total_files: selectedFiles.length,
+          successful: successCount,
+          failed: failCount,
+          results: [...allResults],
+          total_processing_time_ms: Date.now() - startTime,
+          models_used: modelsToRun,
+        });
+        setBatchProgress(prev => prev ? { ...prev, fileStatuses: [...statuses] } : null);
+        setCurrentBatchIndex(allResults.length - 1);
       }
+
+      setBatchProgress(null);
+      setIsAnalyzing(false);
       return;
     }
 
@@ -689,25 +752,81 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                       <p className="text-xs text-purple-600">Traitement par lot</p>
                     </div>
                   </div>
-                  <button
-                    onClick={handleReset}
-                    className="p-2 text-purple-400 hover:text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {!isAnalyzing && (
+                    <button
+                      onClick={handleReset}
+                      className="p-2 text-purple-400 hover:text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {selectedFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm text-purple-700 bg-white/50 px-2 py-1 rounded">
-                      <span className="w-5 h-5 flex items-center justify-center bg-purple-200 rounded text-xs font-medium">
-                        {idx + 1}
-                      </span>
-                      <span className="truncate">{file.name}</span>
-                      <span className="text-purple-500 text-xs">({formatFileSize(file.size)})</span>
+
+                {/* Progress bar */}
+                {batchProgress && (
+                  <div className="mb-3">
+                    <div className="flex justify-between text-xs text-purple-700 mb-1">
+                      <span>Fichier {batchProgress.current + 1} / {batchProgress.total}</span>
+                      <span>{Math.round((batchProgress.fileStatuses.filter(s => s === 'success' || s === 'error').length / batchProgress.total) * 100)}%</span>
                     </div>
-                  ))}
+                    <div className="w-full bg-purple-200 rounded-full h-2">
+                      <div
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${(batchProgress.fileStatuses.filter(s => s === 'success' || s === 'error').length / batchProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-purple-600 mt-1 truncate">
+                      En cours : {batchProgress.currentFile}
+                    </p>
+                  </div>
+                )}
+
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {selectedFiles.map((file, idx) => {
+                    const status = batchProgress?.fileStatuses[idx];
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded transition-colors ${
+                          status === 'processing'
+                            ? 'bg-purple-100 border border-purple-300 text-purple-800'
+                            : status === 'success'
+                            ? 'bg-green-50 text-green-700'
+                            : status === 'error'
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-white/50 text-purple-700'
+                        }`}
+                      >
+                        {/* Status icon */}
+                        {status === 'processing' ? (
+                          <svg className="w-5 h-5 animate-spin text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : status === 'success' ? (
+                          <span className="w-5 h-5 flex items-center justify-center bg-green-500 rounded-full text-white flex-shrink-0">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        ) : status === 'error' ? (
+                          <span className="w-5 h-5 flex items-center justify-center bg-red-500 rounded-full text-white flex-shrink-0">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </span>
+                        ) : (
+                          <span className="w-5 h-5 flex items-center justify-center bg-purple-200 rounded-full text-xs font-medium text-purple-700 flex-shrink-0">
+                            {idx + 1}
+                          </span>
+                        )}
+                        <span className="truncate flex-1">{file.name}</span>
+                        <span className="text-xs opacity-60 flex-shrink-0">({formatFileSize(file.size)})</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -774,7 +893,11 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {batchMode ? `Traitement en cours (${selectedFiles.length} fichiers)...` : 'Analyse en cours...'}
+                  {batchMode && batchProgress
+                    ? `Traitement ${batchProgress.current + 1}/${batchProgress.total} — ${batchProgress.currentFile}`
+                    : batchMode
+                    ? `Traitement en cours (${selectedFiles.length} fichiers)...`
+                    : 'Analyse en cours...'}
                 </div>
               ) : batchMode ? (
                 `Lancer l'Analyse par Lot (${selectedFiles.length} fichiers × ${selectedFullModels.length} modèles)`
@@ -836,7 +959,9 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                     <span className="text-2xl">📊</span>
                   </div>
                   <div>
-                    <h3 className="font-bold text-purple-800">Traitement par Lot Terminé</h3>
+                    <h3 className="font-bold text-purple-800">
+                      {batchProgress ? 'Traitement par Lot en Cours...' : 'Traitement par Lot Terminé'}
+                    </h3>
                     <p className="text-sm text-purple-600">
                       {batchResults.successful} réussi{batchResults.successful > 1 ? 's' : ''} / {batchResults.total_files} fichier{batchResults.total_files > 1 ? 's' : ''} • {(batchResults.total_processing_time_ms / 1000).toFixed(1)}s
                     </p>

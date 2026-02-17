@@ -377,14 +377,39 @@ AVAILABLE_MODELS = {
         "use_wcr": False,
     },
     # WCR Transformer models
-    # Note: WCR binary models (LVEF, AF) are NOT available in HeartWise Docker
-    # despite being mentioned on GitHub - only 77 classes WCR is implemented
     "wcr_77": {
         "name": "77 Classes ECG (WCR Transformer)",
         "docker_diagnosis": "ecg_machine_diagnosis",
         "docker_file_col": "77_classes_ecg_file_name",
         "architecture": "wcr",
         "type": "multi_label",
+        "use_efficientnet": False,
+        "use_wcr": True,
+    },
+    "wcr_lvef_40": {
+        "name": "LVEF ≤40% (WCR Transformer)",
+        "docker_diagnosis": "lvef_40",
+        "docker_file_col": "lvef_40_ecg_file_name",
+        "architecture": "wcr",
+        "type": "binary",
+        "use_efficientnet": False,
+        "use_wcr": True,
+    },
+    "wcr_lvef_50": {
+        "name": "LVEF <50% (WCR Transformer)",
+        "docker_diagnosis": "lvef_50",
+        "docker_file_col": "lvef_50_ecg_file_name",
+        "architecture": "wcr",
+        "type": "binary",
+        "use_efficientnet": False,
+        "use_wcr": True,
+    },
+    "wcr_afib_5y": {
+        "name": "Risque FA 5 ans (WCR Transformer)",
+        "docker_diagnosis": "afib_5y",
+        "docker_file_col": "afib_ecg_file_name",
+        "architecture": "wcr",
+        "type": "binary",
         "use_efficientnet": False,
         "use_wcr": True,
     },
@@ -630,7 +655,7 @@ def parse_probabilities_csv(csv_path: str, model_type: str = "multi_label") -> D
 
                 diagnosis_result = {
                     "name": diagnosis_name,
-                    "probability": round(probability * 100, 2),  # Convert to percentage
+                    "probability": round(probability * 100, 4),  # Convert to percentage (4 decimals for small values)
                     "threshold": round(threshold * 100, 2),
                     "status": status,
                     "category": category,

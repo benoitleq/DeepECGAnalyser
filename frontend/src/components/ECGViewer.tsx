@@ -315,13 +315,14 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
           <p className="text-sm text-gray-400">
             {signalData.duration_seconds.toFixed(1)}s @ {signalData.sample_rate}Hz |
             25mm/s | 10mm/mV
-            {signalData.heart_rate && (
-              <span className="ml-2 text-green-400 font-semibold">
-                | FC: {signalData.heart_rate} bpm
-              </span>
-            )}
           </p>
         </div>
+        {signalData.heart_rate && (
+          <div className="flex flex-col items-center px-4">
+            <span className="text-3xl font-bold text-red-400">{signalData.heart_rate}</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider">bpm</span>
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <select
             value={displaySeconds}

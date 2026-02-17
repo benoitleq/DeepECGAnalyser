@@ -1,5 +1,5 @@
 """Pydantic schemas for request/response validation."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Dict, Any, Optional, List, Literal, Tuple
 from datetime import datetime, timezone
 from enum import Enum
@@ -151,6 +151,7 @@ class ECGDiagnosisResult(BaseModel):
 
 class ECGBinaryResult(BaseModel):
     """Result for a binary ECG model (LVEF, AF)."""
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str = Field(..., description="Model identifier")
     model_name: str = Field(..., description="Model name")
     probability: float = Field(..., ge=0, le=100, description="Positive probability percentage")
@@ -161,6 +162,7 @@ class ECGBinaryResult(BaseModel):
 
 class ECGModelResult(BaseModel):
     """Results from a single ECG model."""
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str = Field(..., description="Model identifier")
     model_name: str = Field(..., description="Model name")
     model_type: str = Field(..., description="multi_label or binary")

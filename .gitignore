@@ -119,7 +119,6 @@ ecgtypeanalyser.py
 test.py
 
 # Legacy/unused modules
-backend/app/ai_engine_client.py
 frontend/src/components/AnalyzePanel.tsx
 frontend/src/components/ConnectionTestPanel.tsx
 frontend/src/components/DockerControlPanel.tsx

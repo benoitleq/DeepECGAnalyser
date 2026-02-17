@@ -59,6 +59,16 @@ interface ECGVisualResultsProps {
   onReset: () => void;
 }
 
+// Format probability with enough decimals to show meaningful values
+const formatProb = (p: number): string => {
+  if (p >= 10) return p.toFixed(1);
+  if (p >= 1) return p.toFixed(1);
+  if (p >= 0.1) return p.toFixed(2);
+  if (p >= 0.01) return p.toFixed(2);
+  if (p > 0) return p.toFixed(3);
+  return '0';
+};
+
 // Status colors and icons
 const getStatusConfig = (status: 'normal' | 'borderline' | 'abnormal') => {
   switch (status) {
@@ -132,7 +142,7 @@ const DiagnosisCard: React.FC<{ diagnosis: ECGDiagnosis }> = ({ diagnosis }) => 
           <span className="font-medium text-gray-800 text-sm">{diagnosis.name}</span>
         </div>
         <span className={`font-bold ${config.textColor}`}>
-          {diagnosis.probability.toFixed(1)}%
+          {formatProb(diagnosis.probability)}%
         </span>
       </div>
       <ProgressBar
@@ -252,7 +262,7 @@ const BinaryResultCard: React.FC<{
         <div className="flex justify-between mb-1">
           <span className="text-sm text-gray-600">Probabilité</span>
           <span className={`font-bold text-xl ${config.textColor}`}>
-            {primaryDiag.probability.toFixed(1)}%
+            {formatProb(primaryDiag.probability)}%
           </span>
         </div>
         <ProgressBar
@@ -273,12 +283,11 @@ const MultiLabelModelCard: React.FC<{
   modelId: string;
   modelResult: ECGModelResult;
   compact?: boolean;
-}> = ({ modelId, modelResult, compact = false }) => {
+}> = ({ modelResult, compact = false }) => {
   const [expanded, setExpanded] = useState(!compact);
 
   const abnormalCount = modelResult.diagnoses.filter(d => d.status === 'abnormal').length;
   const borderlineCount = modelResult.diagnoses.filter(d => d.status === 'borderline').length;
-  const hasIssues = abnormalCount > 0 || borderlineCount > 0;
 
   const overallStatus = abnormalCount > 0 ? 'abnormal' : borderlineCount > 0 ? 'borderline' : 'normal';
   const config = getStatusConfig(overallStatus);
@@ -423,7 +432,7 @@ const ModelComparisonTable: React.FC<{
                   return (
                     <td key={modelId} className="p-3 text-center">
                       <span className={`font-bold ${config.textColor}`}>
-                        {diag.probability.toFixed(1)}%
+                        {formatProb(diag.probability)}%
                       </span>
                       <span className={`ml-2 text-xs ${config.textColor}`}>
                         {config.icon}
@@ -464,7 +473,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
 
   // Aggregate all diagnoses by category from multi-label models
   const allDiagnosesByCategory: Record<string, ECGDiagnosis[]> = {};
-  multiLabelResults.forEach(([modelId, modelResult]) => {
+  multiLabelResults.forEach(([, modelResult]) => {
     Object.entries(modelResult.by_category).forEach(([category, diagnoses]) => {
       if (!allDiagnosesByCategory[category]) {
         allDiagnosesByCategory[category] = [];
@@ -515,7 +524,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                   key={idx}
                   className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium"
                 >
-                  {finding.diagnosis}: {finding.probability.toFixed(1)}%
+                  {finding.diagnosis}: {formatProb(finding.probability)}%
                 </span>
               ))}
             </div>
@@ -833,7 +842,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                               return (
                                 <td key={i} className="p-3 text-center">
                                   <span className={`font-bold ${config.textColor}`}>
-                                    {diag.probability.toFixed(1)}%
+                                    {formatProb(diag.probability)}%
                                   </span>
                                   <span className={`ml-1 text-xs ${config.textColor}`}>
                                     {config.icon}
@@ -858,7 +867,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                             <td className="p-3 text-gray-600">{diag.category}</td>
                             <td className="p-3 text-center">
                               <span className={`font-bold ${config.textColor}`}>
-                                {diag.probability.toFixed(1)}%
+                                {formatProb(diag.probability)}%
                               </span>
                             </td>
                             <td className="p-3 text-center text-gray-500">{diag.threshold}%</td>

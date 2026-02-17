@@ -11,7 +11,7 @@ import time
 from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .settings import settings, ECG_MODELS, DEFAULT_SCREENING_MODELS
 from .ai_engine_client import analyze_file, check_ai_engine_health
@@ -23,11 +23,13 @@ router = APIRouter(prefix="/api/ecg", tags=["ECG Analysis"])
 # Request/Response Models
 class PredictRequest(BaseModel):
     """Single model prediction request."""
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str
 
 
 class PredictResponse(BaseModel):
     """Single model prediction response."""
+    model_config = ConfigDict(protected_namespaces=())
     success: bool
     model_id: str
     model_name: str
@@ -45,6 +47,7 @@ class ScreeningRequest(BaseModel):
 
 class ModelResult(BaseModel):
     """Individual model result in screening."""
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str
     model_name: str
     success: bool
