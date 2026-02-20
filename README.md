@@ -6,8 +6,6 @@ Local-first medical AI application for 12-lead ECG interpretation. Leverages the
 
 ![Main interface](docs/screenshots/01_main_interface.png)
 
----
-
 ## Features
 
 - **Multi-Model Analysis**: 8 AI models (EfficientNet V2 + WCR Transformer) for comprehensive ECG interpretation
@@ -22,19 +20,6 @@ Local-first medical AI application for 12-lead ECG interpretation. Leverages the
 - **100% Local**: Zero data leaves your machine
 - **Bilingual UI**: English / French with persistent language preference
 - **Configurable Workspace**: Directories auto-created on first startup
-
----
-
-## Screenshots
-
-### Main Interface (English)
-![Main interface - English](docs/screenshots/01_main_interface.png)
-
-### System Status & Workspace Panel
-![System status panel expanded](docs/screenshots/02_sidebar_expanded.png)
-
-### French UI (🇫🇷)
-![Interface in French](docs/screenshots/04_lang_toggle_fr.png)
 
 ---
 
