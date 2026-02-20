@@ -4,7 +4,7 @@
 
 Local-first medical AI application for 12-lead ECG interpretation. Leverages the [HeartWise DeepECG Docker](https://github.com/HeartWise-AI/DeepECG_Docker) engine with EfficientNet and WCR (self-supervised) architectures across 77 diagnostic classes. All processing happens locally on your machine with GPU acceleration - no cloud, no external APIs, complete data privacy.
 
-![Main interface](docs/screenshots/01_main_interface.png)
+![Main interface](docs/screenshots/main_interface_v2.png)
 
 ## Features
 
