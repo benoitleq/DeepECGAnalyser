@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../i18n/LanguageContext';
 
 // Types
 export interface ECGDiagnosis {
@@ -69,7 +70,7 @@ const formatProb = (p: number): string => {
   return '0';
 };
 
-// Status colors and icons
+// Status colors and icons (no label — use t() in JSX)
 const getStatusConfig = (status: 'normal' | 'borderline' | 'abnormal') => {
   switch (status) {
     case 'normal':
@@ -80,7 +81,7 @@ const getStatusConfig = (status: 'normal' | 'borderline' | 'abnormal') => {
         borderColor: 'border-green-200',
         textColor: 'text-green-700',
         icon: '✓',
-        label: 'Normal',
+        labelKey: 'statusNormal' as const,
       };
     case 'borderline':
       return {
@@ -90,7 +91,7 @@ const getStatusConfig = (status: 'normal' | 'borderline' | 'abnormal') => {
         borderColor: 'border-yellow-200',
         textColor: 'text-yellow-700',
         icon: '⚠',
-        label: 'Borderline',
+        labelKey: 'statusBorderline' as const,
       };
     case 'abnormal':
       return {
@@ -100,7 +101,7 @@ const getStatusConfig = (status: 'normal' | 'borderline' | 'abnormal') => {
         borderColor: 'border-red-200',
         textColor: 'text-red-700',
         icon: '✗',
-        label: 'Anormal',
+        labelKey: 'statusAbnormal' as const,
       };
   }
 };
@@ -110,21 +111,20 @@ const ProgressBar: React.FC<{
   value: number;
   threshold: number;
   status: 'normal' | 'borderline' | 'abnormal';
-}> = ({ value, threshold, status }) => {
+  thresholdLabel: string;
+}> = ({ value, threshold, status, thresholdLabel }) => {
   const config = getStatusConfig(status);
 
   return (
     <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-      {/* Value bar */}
       <div
         className={`absolute h-full ${config.bgColor} transition-all duration-500`}
         style={{ width: `${Math.min(value, 100)}%` }}
       />
-      {/* Threshold marker */}
       <div
         className="absolute h-full w-0.5 bg-gray-600"
         style={{ left: `${threshold}%` }}
-        title={`Seuil: ${threshold}%`}
+        title={thresholdLabel}
       />
     </div>
   );
@@ -132,6 +132,7 @@ const ProgressBar: React.FC<{
 
 // Diagnosis card component
 const DiagnosisCard: React.FC<{ diagnosis: ECGDiagnosis }> = ({ diagnosis }) => {
+  const { t } = useTranslation();
   const config = getStatusConfig(diagnosis.status);
 
   return (
@@ -149,10 +150,11 @@ const DiagnosisCard: React.FC<{ diagnosis: ECGDiagnosis }> = ({ diagnosis }) => 
         value={diagnosis.probability}
         threshold={diagnosis.threshold}
         status={diagnosis.status}
+        thresholdLabel={t('threshold', { value: diagnosis.threshold })}
       />
       <div className="flex justify-between mt-1 text-xs text-gray-500">
-        <span>Seuil: {diagnosis.threshold}%</span>
-        <span className={config.textColor}>{config.label}</span>
+        <span>{t('threshold', { value: diagnosis.threshold })}</span>
+        <span className={config.textColor}>{t(config.labelKey)}</span>
       </div>
     </div>
   );
@@ -164,6 +166,7 @@ const CategoryAccordion: React.FC<{
   diagnoses: ECGDiagnosis[];
   defaultExpanded?: boolean;
 }> = ({ category, diagnoses, defaultExpanded = false }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const abnormalCount = diagnoses.filter(d => d.status === 'abnormal').length;
@@ -172,7 +175,6 @@ const CategoryAccordion: React.FC<{
 
   return (
     <div className={`border rounded-xl overflow-hidden ${hasIssues ? 'border-yellow-300' : 'border-gray-200'}`}>
-      {/* Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
@@ -184,12 +186,12 @@ const CategoryAccordion: React.FC<{
           <span className="text-sm text-gray-500">({diagnoses.length})</span>
           {abnormalCount > 0 && (
             <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-              {abnormalCount} anormal{abnormalCount > 1 ? 's' : ''}
+              {t('abnormalCount', { n: abnormalCount })}
             </span>
           )}
           {borderlineCount > 0 && (
             <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">
-              {borderlineCount} limite{borderlineCount > 1 ? 's' : ''}
+              {t('borderlineCount', { n: borderlineCount })}
             </span>
           )}
         </div>
@@ -203,12 +205,10 @@ const CategoryAccordion: React.FC<{
         </svg>
       </button>
 
-      {/* Content */}
       {isExpanded && (
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           {diagnoses
             .sort((a, b) => {
-              // Sort by status (abnormal first) then by probability
               const statusOrder = { abnormal: 0, borderline: 1, normal: 2 };
               if (statusOrder[a.status] !== statusOrder[b.status]) {
                 return statusOrder[a.status] - statusOrder[b.status];
@@ -230,7 +230,7 @@ const BinaryResultCard: React.FC<{
   modelName: string;
   result: ECGModelResult;
 }> = ({ modelId, modelName, result }) => {
-  // For binary models, get the primary diagnosis
+  const { t } = useTranslation();
   const primaryDiag = result.diagnoses[0];
   if (!primaryDiag) return null;
 
@@ -254,13 +254,13 @@ const BinaryResultCard: React.FC<{
         </div>
         <div className={`flex items-center gap-1 px-3 py-1 rounded-full ${config.bgColor} text-white`}>
           <span>{config.icon}</span>
-          <span className="font-medium">{config.label}</span>
+          <span className="font-medium">{t(config.labelKey)}</span>
         </div>
       </div>
 
       <div className="mb-3">
         <div className="flex justify-between mb-1">
-          <span className="text-sm text-gray-600">Probabilité</span>
+          <span className="text-sm text-gray-600">{t('colProbability')}</span>
           <span className={`font-bold text-xl ${config.textColor}`}>
             {formatProb(primaryDiag.probability)}%
           </span>
@@ -269,9 +269,10 @@ const BinaryResultCard: React.FC<{
           value={primaryDiag.probability}
           threshold={primaryDiag.threshold}
           status={primaryDiag.status}
+          thresholdLabel={t('thresholdDetection', { value: primaryDiag.threshold })}
         />
         <div className="text-xs text-gray-500 mt-1">
-          Seuil de détection: {primaryDiag.threshold}%
+          {t('thresholdDetection', { value: primaryDiag.threshold })}
         </div>
       </div>
     </div>
@@ -284,6 +285,7 @@ const MultiLabelModelCard: React.FC<{
   modelResult: ECGModelResult;
   compact?: boolean;
 }> = ({ modelResult, compact = false }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(!compact);
 
   const abnormalCount = modelResult.diagnoses.filter(d => d.status === 'abnormal').length;
@@ -311,12 +313,12 @@ const MultiLabelModelCard: React.FC<{
           <div className="flex items-center gap-2">
             {abnormalCount > 0 && (
               <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
-                {abnormalCount} anormal{abnormalCount > 1 ? 's' : ''}
+                {t('abnormalCount', { n: abnormalCount })}
               </span>
             )}
             {borderlineCount > 0 && (
               <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                {borderlineCount} limite{borderlineCount > 1 ? 's' : ''}
+                {t('borderlineCount', { n: borderlineCount })}
               </span>
             )}
             <svg
@@ -348,7 +350,7 @@ const MultiLabelModelCard: React.FC<{
                 <DiagnosisCard key={idx} diagnosis={diag} />
               ))}
             {modelResult.diagnoses.filter(d => d.status !== 'normal').length === 0 && (
-              <p className="text-center text-gray-500 py-4">Aucune anomalie détectée</p>
+              <p className="text-center text-gray-500 py-4">{t('noAnomalyDetected')}</p>
             )}
           </div>
         </div>
@@ -361,13 +363,13 @@ const MultiLabelModelCard: React.FC<{
 const ModelComparisonTable: React.FC<{
   models: [string, ECGModelResult][];
 }> = ({ models }) => {
-  // Get all unique diagnosis names
+  const { t } = useTranslation();
+
   const allDiagnosisNames = new Set<string>();
   models.forEach(([_, model]) => {
     model.diagnoses.forEach(d => allDiagnosisNames.add(d.name));
   });
 
-  // Create comparison data
   const comparisonData = Array.from(allDiagnosisNames).map(name => {
     const row: Record<string, any> = { name };
     models.forEach(([modelId, model]) => {
@@ -377,14 +379,12 @@ const ModelComparisonTable: React.FC<{
     return row;
   });
 
-  // Sort by max probability across models
   comparisonData.sort((a, b) => {
     const maxA = Math.max(...models.map(([id]) => a[id]?.probability || 0));
     const maxB = Math.max(...models.map(([id]) => b[id]?.probability || 0));
     return maxB - maxA;
   });
 
-  // Filter to show only items with differences or abnormal status
   const significantData = comparisonData.filter(row => {
     const values = models.map(([id]) => row[id]?.probability || 0);
     const maxDiff = Math.max(...values) - Math.min(...values);
@@ -395,7 +395,7 @@ const ModelComparisonTable: React.FC<{
   if (significantData.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        Résultats similaires entre les modèles - aucune différence significative
+        {t('noSignificantDiff')}
       </div>
     );
   }
@@ -405,14 +405,14 @@ const ModelComparisonTable: React.FC<{
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="bg-gray-100">
-            <th className="p-3 text-left font-semibold text-gray-700">Diagnostic</th>
+            <th className="p-3 text-left font-semibold text-gray-700">{t('colDiagnosis')}</th>
             {models.map(([modelId, model]) => (
               <th key={modelId} className="p-3 text-center font-semibold text-gray-700">
                 <div>{model.architecture.toUpperCase()}</div>
                 <div className="text-xs font-normal text-gray-500">{model.model_name}</div>
               </th>
             ))}
-            <th className="p-3 text-center font-semibold text-gray-700">Diff</th>
+            <th className="p-3 text-center font-semibold text-gray-700">{t('colDiff')}</th>
           </tr>
         </thead>
         <tbody>
@@ -456,11 +456,11 @@ const ModelComparisonTable: React.FC<{
 
 // Main component
 const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'summary' | 'details' | 'comparison' | 'all'>('summary');
 
   const summaryConfig = getStatusConfig(result.summary.overall_status);
 
-  // Separate binary and multi-label results
   const binaryResults = Object.entries(result.results).filter(
     ([_, r]) => r.model_type === 'binary'
   );
@@ -468,17 +468,14 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
     ([_, r]) => r.model_type === 'multi_label'
   );
 
-  // Check if we have multiple multi-label models for comparison
   const hasMultipleMultiLabel = multiLabelResults.length > 1;
 
-  // Aggregate all diagnoses by category from multi-label models
   const allDiagnosesByCategory: Record<string, ECGDiagnosis[]> = {};
   multiLabelResults.forEach(([, modelResult]) => {
     Object.entries(modelResult.by_category).forEach(([category, diagnoses]) => {
       if (!allDiagnosesByCategory[category]) {
         allDiagnosesByCategory[category] = [];
       }
-      // Add model info to diagnosis for comparison
       diagnoses.forEach(diag => {
         const existing = allDiagnosesByCategory[category].find(d => d.name === diag.name);
         if (!existing) {
@@ -487,6 +484,11 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
       });
     });
   });
+
+  const overallStatusLabel =
+    result.summary.overall_status === 'normal' ? t('overallNormal') :
+    result.summary.overall_status === 'borderline' ? t('overallBorderline') :
+    t('overallAbnormal');
 
   return (
     <div className="space-y-6">
@@ -498,18 +500,17 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
           </div>
           <div className="flex-1">
             <h2 className={`text-2xl font-bold ${summaryConfig.textColor}`}>
-              {result.summary.overall_status === 'normal'
-                ? 'ECG Normal'
-                : result.summary.overall_status === 'borderline'
-                ? 'Résultats à surveiller'
-                : 'Anomalies détectées'}
+              {overallStatusLabel}
             </h2>
             <p className="text-gray-600 mt-1">
-              {result.models_executed.length} modèle{result.models_executed.length > 1 ? 's' : ''} exécuté{result.models_executed.length > 1 ? 's' : ''} en {(result.processing_time_ms / 1000).toFixed(1)}s
+              {t('modelsExecuted', {
+                n: result.models_executed.length,
+                time: (result.processing_time_ms / 1000).toFixed(1)
+              })}
             </p>
           </div>
           <div className="text-right">
-            <div className="text-sm text-gray-500">Patient</div>
+            <div className="text-sm text-gray-500">{t('labelPatient')}</div>
             <div className="font-semibold text-gray-800">{result.patient_id}</div>
           </div>
         </div>
@@ -517,7 +518,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
         {/* Critical findings */}
         {result.summary.critical_findings.length > 0 && (
           <div className="mt-4 pt-4 border-t border-red-200">
-            <h4 className="font-semibold text-red-700 mb-2">Résultats critiques:</h4>
+            <h4 className="font-semibold text-red-700 mb-2">{t('criticalFindings')}</h4>
             <div className="flex flex-wrap gap-2">
               {result.summary.critical_findings.map((finding, idx) => (
                 <span
@@ -536,7 +537,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-gray-200 text-center">
           <div className="text-3xl font-bold text-gray-800">{result.models_executed.length}</div>
-          <div className="text-sm text-gray-500">Modèles</div>
+          <div className="text-sm text-gray-500">{t('labelModels')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-200 text-center">
           <div className="text-3xl font-bold text-green-600">
@@ -545,15 +546,15 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
               0
             )}
           </div>
-          <div className="text-sm text-gray-500">Normaux</div>
+          <div className="text-sm text-gray-500">{t('labelNormal')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-200 text-center">
           <div className="text-3xl font-bold text-yellow-600">{result.summary.total_borderline}</div>
-          <div className="text-sm text-gray-500">Limites</div>
+          <div className="text-sm text-gray-500">{t('labelBorderline')}</div>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-200 text-center">
           <div className="text-3xl font-bold text-red-600">{result.summary.total_abnormal}</div>
-          <div className="text-sm text-gray-500">Anormaux</div>
+          <div className="text-sm text-gray-500">{t('labelAbnormal')}</div>
         </div>
       </div>
 
@@ -566,7 +567,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-blue-800">Format détecté:</span>
+                <span className="font-semibold text-blue-800">{t('detectedFormat')}</span>
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-sm font-medium">
                   {result.file_format_info.original_format === 'philips_pagewriter' ? 'Philips PageWriter TC' :
                    result.file_format_info.original_format === 'mhi' ? 'MHI (Montreal Heart Institute)' :
@@ -582,7 +583,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
               </div>
               {result.file_format_info.conversions_applied.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-blue-600">Conversions:</span>
+                  <span className="text-sm text-blue-600">{t('conversions')}</span>
                   {result.file_format_info.conversions_applied.map((conv, idx) => (
                     <span key={idx} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
                       ✓ {conv}
@@ -603,10 +604,10 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
       {/* Tabs */}
       <div className="flex bg-gray-100 rounded-xl p-1">
         {[
-          { id: 'summary', label: 'Résumé' },
-          ...(hasMultipleMultiLabel ? [{ id: 'comparison', label: 'Comparaison' }] : []),
-          { id: 'details', label: 'Par catégorie' },
-          { id: 'all', label: 'Tous les résultats' },
+          { id: 'summary', label: t('tabSummary') },
+          ...(hasMultipleMultiLabel ? [{ id: 'comparison', label: t('tabComparison') }] : []),
+          { id: 'details', label: t('tabByCategory') },
+          { id: 'all', label: t('tabAllResults') },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -628,7 +629,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
           {/* Binary Results (LVEF, AF) */}
           {binaryResults.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">Modèles de Prédiction</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">{t('predictionModels')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {binaryResults.map(([modelId, modelResult]) => (
                   <BinaryResultCard
@@ -642,14 +643,14 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
             </div>
           )}
 
-          {/* Multi-label model cards (side by side when multiple) */}
+          {/* Multi-label model cards */}
           {multiLabelResults.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                Classification 77 Classes
+                {t('classification77')}
                 {hasMultipleMultiLabel && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
-                    ({multiLabelResults.length} modèles)
+                    {t('modelsCount', { n: multiLabelResults.length })}
                   </span>
                 )}
               </h3>
@@ -670,7 +671,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
           {result.summary.total_abnormal > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                Principaux résultats anormaux
+                {t('mainAbnormalFindings')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {multiLabelResults
@@ -687,16 +688,16 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
         </div>
       )}
 
-      {/* Comparison Tab - only when multiple multi-label models */}
+      {/* Comparison Tab */}
       {activeTab === 'comparison' && hasMultipleMultiLabel && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <span>📊</span>
-              Comparaison des Modèles 77 Classes
+              {t('modelComparison')}
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              Différences significatives entre EfficientNet et WCR Transformer (écart &gt;10% ou anomalies)
+              {t('modelComparisonDesc')}
             </p>
             <ModelComparisonTable models={multiLabelResults} />
           </div>
@@ -722,15 +723,15 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="bg-green-50 rounded-lg p-3">
                       <div className="text-2xl font-bold text-green-600">{normalCount}</div>
-                      <div className="text-xs text-green-700">Normaux</div>
+                      <div className="text-xs text-green-700">{t('labelNormal')}</div>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-3">
                       <div className="text-2xl font-bold text-yellow-600">{borderlineCount}</div>
-                      <div className="text-xs text-yellow-700">Limites</div>
+                      <div className="text-xs text-yellow-700">{t('labelBorderline')}</div>
                     </div>
                     <div className="bg-red-50 rounded-lg p-3">
                       <div className="text-2xl font-bold text-red-600">{abnormalCount}</div>
-                      <div className="text-xs text-red-700">Anormaux</div>
+                      <div className="text-xs text-red-700">{t('labelAbnormal')}</div>
                     </div>
                   </div>
                 </div>
@@ -744,7 +745,6 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
         <div className="space-y-4">
           {Object.entries(allDiagnosesByCategory)
             .sort(([_, a], [__, b]) => {
-              // Sort categories by number of issues
               const aIssues = a.filter(d => d.status !== 'normal').length;
               const bIssues = b.filter(d => d.status !== 'normal').length;
               return bIssues - aIssues;
@@ -762,46 +762,42 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
 
       {activeTab === 'all' && (
         <div className="space-y-4">
-          {/* All diagnoses in a table - with comparison if multiple models */}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="p-3 text-left font-semibold text-gray-700">Diagnostic</th>
-                  <th className="p-3 text-left font-semibold text-gray-700">Catégorie</th>
+                  <th className="p-3 text-left font-semibold text-gray-700">{t('colDiagnosis')}</th>
+                  <th className="p-3 text-left font-semibold text-gray-700">{t('colCategory')}</th>
                   {hasMultipleMultiLabel ? (
                     <>
                       {multiLabelResults.map(([modelId, model]) => (
                         <th key={modelId} className="p-3 text-center font-semibold text-gray-700">
                           <div>{model.architecture.toUpperCase()}</div>
-                          <div className="text-xs font-normal text-gray-500">Prob / Status</div>
+                          <div className="text-xs font-normal text-gray-500">{t('colProbability')} / {t('colStatus')}</div>
                         </th>
                       ))}
-                      <th className="p-3 text-center font-semibold text-gray-700">Diff</th>
+                      <th className="p-3 text-center font-semibold text-gray-700">{t('colDiff')}</th>
                     </>
                   ) : (
                     <>
-                      <th className="p-3 text-center font-semibold text-gray-700">Probabilité</th>
-                      <th className="p-3 text-center font-semibold text-gray-700">Seuil</th>
-                      <th className="p-3 text-center font-semibold text-gray-700">Status</th>
+                      <th className="p-3 text-center font-semibold text-gray-700">{t('colProbability')}</th>
+                      <th className="p-3 text-center font-semibold text-gray-700">{t('colThreshold')}</th>
+                      <th className="p-3 text-center font-semibold text-gray-700">{t('colStatus')}</th>
                     </>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {(() => {
-                  // Get all unique diagnosis names
                   const allDiagNames = new Set<string>();
                   multiLabelResults.forEach(([_, r]) => r.diagnoses.forEach(d => allDiagNames.add(d.name)));
 
-                  // Create lookup maps for each model
                   const modelMaps = multiLabelResults.map(([modelId, r]) => {
                     const map = new Map<string, ECGDiagnosis>();
                     r.diagnoses.forEach(d => map.set(d.name, d));
                     return { modelId, map, arch: r.architecture };
                   });
 
-                  // Build rows with all diagnoses
                   return Array.from(allDiagNames)
                     .map(name => {
                       const firstDiag = modelMaps[0]?.map.get(name);
@@ -873,7 +869,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                             <td className="p-3 text-center text-gray-500">{diag.threshold}%</td>
                             <td className="p-3 text-center">
                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm ${config.bgColor} text-white`}>
-                                {config.icon} {config.label}
+                                {config.icon} {t(config.labelKey)}
                               </span>
                             </td>
                           </tr>
@@ -887,7 +883,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
         </div>
       )}
 
-      {/* Warnings with special styling for ECG reconstruction */}
+      {/* Warnings */}
       {result.warnings.length > 0 && (
         <div className="space-y-3">
           {result.warnings.map((warning, idx) => {
@@ -902,11 +898,9 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
                     </svg>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-blue-800">ECG Reconstruit</h4>
+                    <h4 className="font-semibold text-blue-800">{t('reconstructedECG')}</h4>
                     <p className="text-sm text-blue-700 mt-1">{warning}</p>
-                    <p className="text-xs text-blue-600 mt-2">
-                      Les dérivations III, aVR, aVL et aVF ont été calculées à partir de I et II
-                    </p>
+                    <p className="text-xs text-blue-600 mt-2">{t('reconstructedECGDetail')}</p>
                   </div>
                 </div>
               );
@@ -927,7 +921,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
       {/* Error */}
       {result.error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-          <h4 className="font-semibold text-red-800 mb-2">Erreur:</h4>
+          <h4 className="font-semibold text-red-800 mb-2">{t('errorLabel')}</h4>
           <p className="text-sm text-red-700">{result.error}</p>
         </div>
       )}
@@ -937,7 +931,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
         onClick={onReset}
         className="w-full py-4 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
       >
-        Nouvelle Analyse
+        {t('btnNewAnalysis')}
       </button>
     </div>
   );

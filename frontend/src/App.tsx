@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import SystemStatusPanel from './components/SystemStatusPanel';
 import ECGAnalysisPanel from './components/ECGAnalysisPanel';
+import { useTranslation } from './i18n/LanguageContext';
 
 function App() {
   const [aiEngineReady, setAiEngineReady] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -22,9 +24,9 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  DeepECGAnalyser <span className="text-sm font-semibold text-gray-500">- ECG Data Analysis</span>
+                  DeepECGAnalyser <span className="text-sm font-semibold text-gray-500">{t('appSubtitle')}</span>
                 </h1>
-                <p className="text-xs text-gray-500">AI-powered cardiac analysis with multiple diagnostic models</p>
+                <p className="text-xs text-gray-500">{t('appDescription')}</p>
               </div>
             </div>
 
@@ -58,12 +60,9 @@ function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
             {/* Description */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">About DeepECGAnalyser</h4>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('footerAboutTitle')}</h4>
               <p className="text-xs text-gray-500 leading-relaxed">
-                This application uses the <span className="font-semibold text-gray-700">HeartWise AI engine</span> for
-                ECG interpretation. HeartWise provides foundation models for generalizable electrocardiogram analysis,
-                comparing supervised and self-supervised approaches (EfficientNet, WCR) across 77 diagnostic classes.
-                All processing is performed locally via Docker with GPU acceleration.
+                {t('footerAboutText')}
               </p>
             </div>
 
@@ -85,7 +84,7 @@ function App() {
             <p>DeepECGAnalyser - Benoit LEQUEUX (Cercle IA SFC)</p>
             <p className="flex items-center gap-2">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              100% Local Processing
+              {t('footerLocalProcessing')}
             </p>
           </div>
         </div>

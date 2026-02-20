@@ -9,12 +9,14 @@ import {
 import ModelSelector, { ECGModel } from './ModelSelector';
 import ECGVisualResults, { FullECGAnalysisResult } from './ECGVisualResults';
 import ECGViewer from './ECGViewer';
+import { useTranslation } from '../i18n/LanguageContext';
 
 interface ECGAnalysisPanelProps {
   aiEngineReady: boolean;
 }
 
 const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) => {
+  const { t } = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +58,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   useEffect(() => {
     const loadModels = async () => {
       try {
-        // Load available models for full analysis
         const availableData = await getAvailableECGModels();
         const models: ECGModel[] = availableData.models.map(m => ({
           id: m.id,
@@ -69,7 +70,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
         setSelectedFullModels(availableData.default_selection);
       } catch (err) {
         console.error('Failed to load models:', err);
-        setError('Échec du chargement des modèles');
+        setError(t('errorLoadModels'));
       } finally {
         setIsLoadingModels(false);
       }
@@ -88,7 +89,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   const validateFile = (file: File): boolean => {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setError(`Type de fichier invalide. Autorisés: ${ALLOWED_EXTENSIONS.join(', ')}`);
+      setError(t('errorInvalidFile', { exts: ALLOWED_EXTENSIONS.join(', ') }));
       return false;
     }
     return true;
@@ -123,20 +124,17 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   const exportBatchResultsToCSV = () => {
     if (!batchResults || batchResults.results.length === 0) return;
 
-    // Collect all unique diagnosis names (from multi_label), multi-label model archs, and binary model IDs
     const allDiagnoses = new Set<string>();
-    const allMultiLabelArchs = new Set<string>(); // architecture names (EFFICIENTNET, WCR)
-    const allBinaryModels = new Map<string, string>(); // id -> name
+    const allMultiLabelArchs = new Set<string>();
+    const allBinaryModels = new Map<string, string>();
 
     batchResults.results.forEach(r => {
       if (r.success && r.result) {
         Object.values(r.result.results).forEach(modelResult => {
-          // Multi-label models (77 classes) have many diagnoses (>10)
           if (modelResult.model_type === 'multi_label' || modelResult.diagnoses.length > 10) {
             modelResult.diagnoses.forEach(d => allDiagnoses.add(d.name));
             allMultiLabelArchs.add(modelResult.architecture.toUpperCase());
           } else if (modelResult.model_type === 'binary') {
-            // Binary models - use model_id as identifier
             allBinaryModels.set(modelResult.model_id, modelResult.model_name);
           }
         });
@@ -148,18 +146,14 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
     const binaryModelIds = Array.from(allBinaryModels.keys()).sort();
     const hasMultipleMultiLabel = multiLabelArchs.length > 1;
 
-    // Build CSV header
     const headers = ['filename'];
 
-    // Add columns for each diagnosis - include model arch if multiple multi-label models
     diagnosisNames.forEach(name => {
       if (hasMultipleMultiLabel) {
-        // Add columns for each architecture
         multiLabelArchs.forEach(arch => {
           headers.push(`${name}_${arch}_prob`);
           headers.push(`${name}_${arch}_status`);
         });
-        // Add difference column
         headers.push(`${name}_diff`);
       } else {
         headers.push(`${name}_prob`);
@@ -167,13 +161,11 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       }
     });
 
-    // Add columns for binary models using their model_id
     binaryModelIds.forEach(id => {
       headers.push(`${id}_prob`);
       headers.push(`${id}_status`);
     });
 
-    // Build CSV rows
     const rows: string[][] = [];
 
     batchResults.results.forEach(r => {
@@ -181,7 +173,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
 
       const row: string[] = [r.filename];
 
-      // Create maps for quick lookup - keyed by "diagnosis_arch" for multi-label
       const diagnosisByArch = new Map<string, Map<string, { prob: number; status: string }>>();
       const binaryMap = new Map<string, { prob: number; status: string }>();
 
@@ -195,7 +186,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
             diagnosisByArch.get(arch)!.set(d.name, { prob: d.probability, status: d.status });
           });
         } else if (modelResult.model_type === 'binary') {
-          // Binary model - get the first diagnosis which is the main result
           if (modelResult.diagnoses.length > 0) {
             const d = modelResult.diagnoses[0];
             binaryMap.set(modelResult.model_id, { prob: d.probability, status: d.status });
@@ -203,7 +193,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
         }
       });
 
-      // Add diagnosis values
       diagnosisNames.forEach(name => {
         if (hasMultipleMultiLabel) {
           const probs: number[] = [];
@@ -214,7 +203,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
             row.push(result ? result.status : '');
             if (result) probs.push(result.prob);
           });
-          // Calculate difference between models
           if (probs.length >= 2) {
             const diff = Math.abs(probs[0] - probs[1]);
             row.push(diff.toFixed(2));
@@ -222,7 +210,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
             row.push('');
           }
         } else {
-          // Single model - get from first architecture
           const archMap = diagnosisByArch.get(multiLabelArchs[0]);
           const result = archMap?.get(name);
           row.push(result ? result.prob.toFixed(2) : '');
@@ -230,7 +217,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
         }
       });
 
-      // Add binary model values
       binaryModelIds.forEach(id => {
         const result = binaryMap.get(id);
         row.push(result ? result.prob.toFixed(2) : '');
@@ -240,13 +226,11 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       rows.push(row);
     });
 
-    // Generate CSV content
     const csvContent = [
       headers.join(';'),
       ...rows.map(row => row.join(';'))
     ].join('\n');
 
-    // Download CSV
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -262,13 +246,11 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   const exportSingleResultToCSV = () => {
     if (!fullAnalysisResult || !selectedFile) return;
 
-    // Collect multi-label models and binary models separately
     const multiLabelModels: { id: string; arch: string; diagnoses: Map<string, { prob: number; status: string }> }[] = [];
     const binaryModels: { id: string; name: string }[] = [];
     const allDiagnosisNames = new Set<string>();
 
     Object.entries(fullAnalysisResult.results).forEach(([modelId, modelResult]) => {
-      // Multi-label models (77 classes) have many diagnoses (>10)
       if (modelResult.model_type === 'multi_label' || modelResult.diagnoses.length > 10) {
         const diagMap = new Map<string, { prob: number; status: string }>();
         modelResult.diagnoses.forEach(d => {
@@ -281,7 +263,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
           diagnoses: diagMap
         });
       } else if (modelResult.model_type === 'binary') {
-        // Binary models - use model_id as identifier (lvef_40, lvef_50, afib_5y, etc.)
         binaryModels.push({ id: modelResult.model_id, name: modelResult.model_name });
       }
     });
@@ -290,18 +271,14 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
     binaryModels.sort((a, b) => a.id.localeCompare(b.id));
     const hasMultipleMultiLabel = multiLabelModels.length > 1;
 
-    // Build CSV header
     const headers = ['filename'];
 
-    // Add columns for each diagnosis - include model arch if multiple multi-label models
     diagnosisNames.forEach(name => {
       if (hasMultipleMultiLabel) {
-        // Add columns for each model
         multiLabelModels.forEach(model => {
           headers.push(`${name}_${model.arch}_prob`);
           headers.push(`${name}_${model.arch}_status`);
         });
-        // Add difference column
         headers.push(`${name}_diff`);
       } else {
         headers.push(`${name}_prob`);
@@ -309,16 +286,13 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       }
     });
 
-    // Add columns for binary models using their model_id
     binaryModels.forEach(model => {
       headers.push(`${model.id}_prob`);
       headers.push(`${model.id}_status`);
     });
 
-    // Build row
     const row: string[] = [selectedFile.name];
 
-    // Create binary map for quick lookup
     const binaryMap = new Map<string, { prob: number; status: string }>();
     Object.values(fullAnalysisResult.results).forEach(modelResult => {
       if (modelResult.model_type === 'binary') {
@@ -329,7 +303,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       }
     });
 
-    // Add diagnosis values
     diagnosisNames.forEach(name => {
       if (hasMultipleMultiLabel) {
         const probs: number[] = [];
@@ -339,7 +312,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
           row.push(result ? result.status : '');
           if (result) probs.push(result.prob);
         });
-        // Calculate difference between models
         if (probs.length >= 2) {
           const diff = Math.abs(probs[0] - probs[1]);
           row.push(diff.toFixed(2));
@@ -353,20 +325,17 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       }
     });
 
-    // Add binary model values
     binaryModels.forEach(model => {
       const result = binaryMap.get(model.id);
       row.push(result ? result.prob.toFixed(2) : '');
       row.push(result ? result.status : '');
     });
 
-    // Generate CSV content
     const csvContent = [
       headers.join(';'),
       row.join(';')
     ].join('\n');
 
-    // Download CSV
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -411,7 +380,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
   };
 
   const handleAnalyze = async () => {
-    // Batch mode - process files one by one with progress tracking
     if (batchMode && selectedFiles.length > 0) {
       setIsAnalyzing(true);
       setError(null);
@@ -432,7 +400,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       const startTime = Date.now();
 
       for (let i = 0; i < selectedFiles.length; i++) {
-        // Mark current file as processing
         statuses[i] = 'processing';
         setBatchProgress({
           current: i,
@@ -469,7 +436,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
           failCount++;
         }
 
-        // Update batch results incrementally (UI refreshes after each file)
         setBatchResults({
           success: true,
           total_files: selectedFiles.length,
@@ -488,7 +454,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       return;
     }
 
-    // Single file mode
     if (!selectedFile) return;
 
     setIsAnalyzing(true);
@@ -504,7 +469,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       );
       setFullAnalysisResult(response as FullECGAnalysisResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de l'analyse");
+      setError(err instanceof Error ? err.message : t('errorAnalysis'));
     } finally {
       setIsAnalyzing(false);
     }
@@ -518,7 +483,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Navigation for batch results
   const goToPreviousECG = () => {
     if (currentBatchIndex > 0) {
       setCurrentBatchIndex(currentBatchIndex - 1);
@@ -537,7 +501,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
     }
   };
 
-  // Get current batch result for display
   const currentBatchResult = batchResults?.results[currentBatchIndex];
 
   const formatFileSize = (bytes: number): string => {
@@ -555,15 +518,13 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
       <div className="bg-gradient-to-r from-red-500 to-pink-600 p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Analyse ECG Complète</h2>
-            <p className="text-red-100 text-sm mt-1">
-              Diagnostic cardiaque par IA avec affichage visuel
-            </p>
+            <h2 className="text-2xl font-bold">{t('panelTitle')}</h2>
+            <p className="text-red-100 text-sm mt-1">{t('panelSubtitle')}</p>
           </div>
           {aiEngineReady && (
             <div className="flex items-center gap-2 bg-white/20 px-3 py-1.5 rounded-full">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-sm font-medium">Moteur IA Prêt</span>
+              <span className="text-sm font-medium">{t('engineReady')}</span>
             </div>
           )}
         </div>
@@ -578,8 +539,8 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <div>
-                <p className="font-medium text-yellow-800">Moteur IA non prêt</p>
-                <p className="text-sm text-yellow-600">Démarrez le conteneur Docker depuis la barre latérale</p>
+                <p className="font-medium text-yellow-800">{t('engineNotReady')}</p>
+                <p className="text-sm text-yellow-600">{t('engineNotReadyMsg')}</p>
               </div>
             </div>
           </div>
@@ -587,9 +548,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
 
         {/* Description */}
         {!hasResult && (
-          <p className="text-center text-sm text-gray-500 mb-6">
-            Analyse complète avec tous les modèles et affichage visuel des résultats
-          </p>
+          <p className="text-center text-sm text-gray-500 mb-6">{t('panelDescription')}</p>
         )}
 
         {/* Model Selection for Full Analysis */}
@@ -607,8 +566,8 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               {/* GPU Option */}
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex-1 mr-4">
-                  <span className="font-medium text-gray-800">GPU (CUDA)</span>
-                  <p className="text-xs text-gray-500">Accélération</p>
+                  <span className="font-medium text-gray-800">{t('gpuLabel')}</span>
+                  <p className="text-xs text-gray-500">{t('gpuDesc')}</p>
                 </div>
                 <button
                   onClick={() => setUseGpu(!useGpu)}
@@ -627,8 +586,8 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               {/* Batch Mode Option */}
               <div className="flex items-center justify-between p-4 bg-purple-50 rounded-xl border border-purple-200">
                 <div className="flex-1 mr-4">
-                  <span className="font-medium text-purple-800">Mode Lot</span>
-                  <p className="text-xs text-purple-600">Multi-fichiers</p>
+                  <span className="font-medium text-purple-800">{t('batchLabel')}</span>
+                  <p className="text-xs text-purple-600">{t('batchDesc')}</p>
                 </div>
                 <button
                   onClick={() => setBatchMode(!batchMode)}
@@ -647,7 +606,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
           </div>
         )}
 
-
         {/* Loading Models */}
         {isLoadingModels && (
           <div className="flex items-center justify-center py-12">
@@ -655,7 +613,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="ml-3 text-gray-600">Chargement des modèles...</span>
+            <span className="ml-3 text-gray-600">{t('loadingModels')}</span>
           </div>
         )}
 
@@ -694,18 +652,18 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               </svg>
             </div>
             <p className="text-gray-700 font-semibold text-lg">
-              {batchMode ? 'Déposez vos fichiers ECG ici' : 'Déposez votre fichier ECG ici'}
+              {batchMode ? t('dropzoneMulti') : t('dropzoneSingle')}
             </p>
-            <p className="text-gray-500 text-sm mt-1">ou cliquez pour parcourir</p>
+            <p className="text-gray-500 text-sm mt-1">{t('dropzoneOr')}</p>
             <p className="text-xs text-gray-400 mt-3">
-              {batchMode ? 'Sélectionnez plusieurs fichiers XML ou NPY' : 'Formats: XML, CSV, Parquet, NPY (max 100MB)'}
+              {batchMode ? t('dropzoneFormatsBatch') : t('dropzoneFormatsSingle')}
             </p>
             {batchMode && (
               <div className="mt-3 inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                Mode traitement par lot actif
+                {t('batchModeActive')}
               </div>
             )}
           </div>
@@ -748,8 +706,8 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                       <span className="text-purple-700 font-bold">{selectedFiles.length}</span>
                     </div>
                     <div>
-                      <p className="font-semibold text-purple-800">Fichiers sélectionnés</p>
-                      <p className="text-xs text-purple-600">Traitement par lot</p>
+                      <p className="font-semibold text-purple-800">{t('selectedFiles')}</p>
+                      <p className="text-xs text-purple-600">{t('batchProcessing')}</p>
                     </div>
                   </div>
                   {!isAnalyzing && (
@@ -768,8 +726,8 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                 {batchProgress && (
                   <div className="mb-3">
                     <div className="flex justify-between text-xs text-purple-700 mb-1">
-                      <span>Fichier {batchProgress.current + 1} / {batchProgress.total}</span>
-                      <span>{Math.round((batchProgress.fileStatuses.filter(s => s === 'success' || s === 'error').length / batchProgress.total) * 100)}%</span>
+                      <span>{t('batchFileProgress', { current: batchProgress.current + 1, total: batchProgress.total })}</span>
+                      <span>{t('batchFileProgressPct', { pct: Math.round((batchProgress.fileStatuses.filter(s => s === 'success' || s === 'error').length / batchProgress.total) * 100) })}</span>
                     </div>
                     <div className="w-full bg-purple-200 rounded-full h-2">
                       <div
@@ -778,7 +736,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                       />
                     </div>
                     <p className="text-xs text-purple-600 mt-1 truncate">
-                      En cours : {batchProgress.currentFile}
+                      {t('batchCurrentFile', { file: batchProgress.currentFile })}
                     </p>
                   </div>
                 )}
@@ -799,7 +757,6 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                             : 'bg-white/50 text-purple-700'
                         }`}
                       >
-                        {/* Status icon */}
                         {status === 'processing' ? (
                           <svg className="w-5 h-5 animate-spin text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -838,24 +795,22 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                   <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-sm font-medium">
-                    Fichier XML - Conversion automatique vers GE MUSE si nécessaire
-                  </span>
+                  <span className="text-sm font-medium">{t('xmlFormatInfo')}</span>
                 </div>
                 <div className="mt-2 ml-7">
                   <table className="text-xs text-gray-600 w-full">
                     <thead>
                       <tr className="text-left text-gray-500">
-                        <th className="pr-3 pb-1 font-medium">Format</th>
-                        <th className="pr-3 pb-1 font-medium">Constructeur</th>
-                        <th className="pb-1 font-medium">Conversion</th>
+                        <th className="pr-3 pb-1 font-medium">{t('colFormat')}</th>
+                        <th className="pr-3 pb-1 font-medium">{t('colManufacturer')}</th>
+                        <th className="pb-1 font-medium">{t('colConversion')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr><td className="pr-3 py-0.5 font-semibold text-green-700">GE MUSE RestingECG</td><td className="pr-3">GE Healthcare</td><td><span className="text-green-600">Natif</span></td></tr>
-                      <tr><td className="pr-3 py-0.5">Philips PageWriter / TC</td><td className="pr-3">Philips</td><td>Repbeats + resampling</td></tr>
-                      <tr><td className="pr-3 py-0.5">HL7 aECG (Annotated ECG)</td><td className="pr-3">Standard FDA</td><td>Digits + scale uV</td></tr>
-                      <tr><td className="pr-3 py-0.5">CardiologyXML</td><td className="pr-3">Générique</td><td>Base64 int16</td></tr>
+                      <tr><td className="pr-3 py-0.5 font-semibold text-green-700">{t('formatGeMuse')}</td><td className="pr-3">{t('mfrGe')}</td><td><span className="text-green-600">{t('convNative')}</span></td></tr>
+                      <tr><td className="pr-3 py-0.5">{t('formatPhilips')}</td><td className="pr-3">{t('mfrPhilips')}</td><td>{t('convRepbeats')}</td></tr>
+                      <tr><td className="pr-3 py-0.5">{t('formatHl7')}</td><td className="pr-3">{t('mfrHl7')}</td><td>{t('convDigitsScale')}</td></tr>
+                      <tr><td className="pr-3 py-0.5">{t('formatCardio')}</td><td className="pr-3">{t('mfrCardio')}</td><td>{t('convBase64')}</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -869,7 +824,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
                 <span className="text-sm font-medium">
-                  {selectedFullModels.length} modèle{selectedFullModels.length > 1 ? 's' : ''} sélectionné{selectedFullModels.length > 1 ? 's' : ''} • GPU: {useGpu ? 'Activé' : 'Désactivé'}
+                  {t('modelsSelected', { n: selectedFullModels.length })} • {useGpu ? t('gpuEnabled') : t('gpuDisabled')}
                 </span>
               </div>
             </div>
@@ -894,15 +849,15 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   {batchMode && batchProgress
-                    ? `Traitement ${batchProgress.current + 1}/${batchProgress.total} — ${batchProgress.currentFile}`
+                    ? t('btnAnalyzingBatchProgress', { current: batchProgress.current + 1, total: batchProgress.total, file: batchProgress.currentFile })
                     : batchMode
-                    ? `Traitement en cours (${selectedFiles.length} fichiers)...`
-                    : 'Analyse en cours...'}
+                    ? t('btnAnalyzingBatch', { files: selectedFiles.length })
+                    : t('btnAnalyzing')}
                 </div>
               ) : batchMode ? (
-                `Lancer l'Analyse par Lot (${selectedFiles.length} fichiers × ${selectedFullModels.length} modèles)`
+                t('btnAnalyzeBatch', { files: selectedFiles.length, models: selectedFullModels.length })
               ) : (
-                `Lancer l'Analyse Complète (${selectedFullModels.length} modèles)`
+                t('btnAnalyzeSingle', { models: selectedFullModels.length })
               )}
             </button>
           </div>
@@ -920,8 +875,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
           </div>
         )}
 
-        {/* Results */}
-        {/* ECG Viewer Toggle Button */}
+        {/* ECG Viewer Toggle Button for single result */}
         {fullAnalysisResult && (
           <div className="mb-4">
             <button
@@ -933,7 +887,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               }`}
             >
               <span className="text-xl">💓</span>
-              {showECGViewer ? 'Masquer le tracé ECG' : 'Afficher le tracé ECG'}
+              {showECGViewer ? t('btnHideTrace') : t('btnShowTrace')}
             </button>
           </div>
         )}
@@ -960,29 +914,32 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                   </div>
                   <div>
                     <h3 className="font-bold text-purple-800">
-                      {batchProgress ? 'Traitement par Lot en Cours...' : 'Traitement par Lot Terminé'}
+                      {batchProgress ? t('batchInProgress') : t('batchDone')}
                     </h3>
                     <p className="text-sm text-purple-600">
-                      {batchResults.successful} réussi{batchResults.successful > 1 ? 's' : ''} / {batchResults.total_files} fichier{batchResults.total_files > 1 ? 's' : ''} • {(batchResults.total_processing_time_ms / 1000).toFixed(1)}s
+                      {t('batchSummary', {
+                        success: batchResults.successful,
+                        total: batchResults.total_files,
+                        time: (batchResults.total_processing_time_ms / 1000).toFixed(1)
+                      })}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {batchResults.failed > 0 && (
                     <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
-                      {batchResults.failed} échec{batchResults.failed > 1 ? 's' : ''}
+                      {t('batchFailed', { n: batchResults.failed })}
                     </span>
                   )}
-                  {/* Export CSV Button */}
                   <button
                     onClick={exportBatchResultsToCSV}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm"
-                    title="Exporter tous les résultats en CSV pour la recherche"
+                    title={t('btnExportCsvTooltip')}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    Exporter CSV
+                    {t('btnExportCsv')}
                   </button>
                 </div>
               </div>
@@ -1002,7 +959,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Précédent
+                {t('btnPrevious')}
               </button>
 
               <div className="flex items-center gap-2">
@@ -1032,7 +989,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                     : 'bg-white text-gray-700 hover:bg-gray-50 shadow-sm'
                 }`}
               >
-                Suivant
+                {t('btnNext')}
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
@@ -1044,15 +1001,17 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               <div className={`p-3 rounded-xl ${currentBatchResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className={`text-2xl ${currentBatchResult.success ? '' : ''}`}>
+                    <span className="text-2xl">
                       {currentBatchResult.success ? '✅' : '❌'}
                     </span>
                     <div>
                       <p className="font-semibold text-gray-800">
-                        ECG {currentBatchIndex + 1}/{batchResults.total_files}: {currentBatchResult.filename}
+                        {t('batchFileHeader', { current: currentBatchIndex + 1, total: batchResults.total_files, file: currentBatchResult.filename })}
                       </p>
                       <p className={`text-sm ${currentBatchResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                        {currentBatchResult.success ? `Patient: ${currentBatchResult.patient_id}` : currentBatchResult.error}
+                        {currentBatchResult.success
+                          ? t('batchPatient', { id: currentBatchResult.patient_id })
+                          : currentBatchResult.error}
                       </p>
                     </div>
                   </div>
@@ -1068,7 +1027,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                       }`}
                     >
                       <span className="text-lg">💓</span>
-                      {showECGViewer ? 'Masquer ECG' : 'Voir ECG'}
+                      {showECGViewer ? t('btnHideEcg') : t('btnShowEcg')}
                     </button>
                   )}
                 </div>
@@ -1101,7 +1060,7 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h4 className="font-semibold text-red-800 mb-2">Échec de l'analyse</h4>
+                <h4 className="font-semibold text-red-800 mb-2">{t('batchAnalysisFailed')}</h4>
                 <p className="text-red-600">{currentBatchResult.error}</p>
               </div>
             )}
@@ -1115,12 +1074,12 @@ const ECGAnalysisPanel: React.FC<ECGAnalysisPanelProps> = ({ aiEngineReady }) =>
               <button
                 onClick={exportSingleResultToCSV}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm"
-                title="Exporter les résultats en CSV pour la recherche"
+                title={t('btnExportCsvTooltip')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                Exporter CSV
+                {t('btnExportCsv')}
               </button>
             </div>
             <ECGVisualResults result={fullAnalysisResult} onReset={handleReset} />

@@ -8,12 +8,14 @@ import {
   DockerStatusResponse,
   ConfigResponse,
 } from '../api';
+import { useTranslation } from '../i18n/LanguageContext';
 
 interface SystemStatusPanelProps {
   onEngineStatusChange: (ready: boolean) => void;
 }
 
 const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusChange }) => {
+  const { t, lang, setLang } = useTranslation();
   const [dockerStatus, setDockerStatus] = useState<DockerStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
@@ -32,10 +34,8 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
     try {
       const status = await getDockerStatus();
       setDockerStatus(status);
-      setError(null); // Clear error on success
+      setError(null);
 
-      // Container is ready when it's running - no API health check needed
-      // This container uses docker exec commands, not an HTTP API
       if (status.container_running) {
         setAiHealthy(true);
         onEngineStatusChange(true);
@@ -44,7 +44,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
         onEngineStatusChange(false);
       }
     } catch (err) {
-      setError('Failed to get status');
+      setError(t('errorGetStatus'));
       onEngineStatusChange(false);
     } finally {
       setIsLoading(false);
@@ -58,7 +58,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
       setWorkspacePath(config.workspace_path);
       setConfigError(null);
     } catch (err) {
-      setConfigError('Failed to load config');
+      setConfigError(t('errorLoadConfig'));
     }
   };
 
@@ -71,7 +71,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
       setWorkspacePath(config.workspace_path);
       setIsEditingPath(false);
     } catch (err: any) {
-      setConfigError(err?.response?.data?.detail || 'Failed to update config');
+      setConfigError(err?.response?.data?.detail || t('errorUpdateConfig'));
     } finally {
       setIsSavingConfig(false);
     }
@@ -88,16 +88,15 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
     setIsStarting(true);
     setError(null);
     try {
-      // Pass workspace path to mount as /data
       const result = await startDockerEngine(undefined, workspacePath || undefined);
       if (result.success) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         await fetchStatus();
       } else {
-        setError(result.error || 'Failed to start');
+        setError(result.error || t('errorStart'));
       }
     } catch (err) {
-      setError('Failed to start engine');
+      setError(t('errorStart'));
     } finally {
       setIsStarting(false);
     }
@@ -110,7 +109,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
       await stopDockerEngine();
       await fetchStatus();
     } catch (err) {
-      setError('Failed to stop engine');
+      setError(t('errorStop'));
     } finally {
       setIsStopping(false);
     }
@@ -127,20 +126,31 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
   const status = getOverallStatus();
 
   const statusConfig = {
-    'loading': { color: 'gray', text: 'Checking...', bg: 'bg-gray-100' },
-    'docker-off': { color: 'red', text: 'Docker Off', bg: 'bg-red-50' },
-    'stopped': { color: 'yellow', text: 'Stopped', bg: 'bg-yellow-50' },
-    'starting': { color: 'blue', text: 'Starting...', bg: 'bg-blue-50' },
-    'ready': { color: 'green', text: 'Ready', bg: 'bg-green-50' },
+    'loading':    { color: 'gray',   text: t('statusChecking'),  bg: 'bg-gray-100' },
+    'docker-off': { color: 'red',    text: t('statusDockerOff'), bg: 'bg-red-50' },
+    'stopped':    { color: 'yellow', text: t('statusStopped'),   bg: 'bg-yellow-50' },
+    'starting':   { color: 'blue',   text: t('statusStarting'),  bg: 'bg-blue-50' },
+    'ready':      { color: 'green',  text: t('statusReady'),     bg: 'bg-green-50' },
   };
 
-  const config = statusConfig[status];
+  const cfg = statusConfig[status];
 
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+      {/* Language toggle */}
+      <div className="flex justify-end px-3 pt-2">
+        <button
+          onClick={() => setLang(lang === 'en' ? 'fr' : 'en')}
+          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+          title={t('language')}
+        >
+          {lang === 'en' ? '🇫🇷 Français' : '🇬🇧 English'}
+        </button>
+      </div>
+
       {/* Compact Header - Always visible */}
       <div
-        className={`p-4 cursor-pointer transition-colors ${config.bg}`}
+        className={`p-4 cursor-pointer transition-colors ${cfg.bg}`}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center justify-between">
@@ -152,14 +162,14 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
               'bg-red-500'
             }`} />
             <div>
-              <h3 className="font-semibold text-gray-800 text-sm">AI Engine</h3>
+              <h3 className="font-semibold text-gray-800 text-sm">{t('aiEngine')}</h3>
               <p className={`text-xs ${
                 status === 'ready' ? 'text-green-600' :
                 status === 'starting' ? 'text-blue-600' :
                 status === 'stopped' ? 'text-yellow-600' :
                 'text-red-600'
               }`}>
-                {config.text}
+                {cfg.text}
               </p>
             </div>
           </div>
@@ -180,7 +190,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
             disabled={isStarting}
             className="mt-3 w-full py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
-            {isStarting ? 'Starting...' : 'Start Engine'}
+            {isStarting ? t('btnStarting') : t('btnStartEngine')}
           </button>
         )}
       </div>
@@ -191,24 +201,24 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
           {/* Status Items */}
           <div className="space-y-2">
             <StatusItem
-              label="Docker"
+              label={t('labelDocker')}
               status={dockerStatus?.docker_running ? 'ok' : 'error'}
-              detail={dockerStatus?.docker_running ? 'Running' : 'Not running'}
+              detail={dockerStatus?.docker_running ? t('detailRunning') : t('detailNotRunning')}
             />
             <StatusItem
-              label="GPU"
+              label={t('labelGpu')}
               status={dockerStatus?.gpu_available ? 'ok' : 'warning'}
-              detail={dockerStatus?.gpu_available ? 'Available' : 'Not detected'}
+              detail={dockerStatus?.gpu_available ? t('detailAvailable') : t('detailNotDetected')}
             />
             <StatusItem
-              label="Container"
+              label={t('labelContainer')}
               status={dockerStatus?.container_running ? 'ok' : 'off'}
-              detail={dockerStatus?.container_running ? 'Running' : 'Stopped'}
+              detail={dockerStatus?.container_running ? t('detailRunning') : t('detailStopped')}
             />
             <StatusItem
-              label="Engine"
+              label={t('labelEngine')}
               status={aiHealthy ? 'ok' : 'off'}
-              detail={aiHealthy ? 'Ready' : 'Not ready'}
+              detail={aiHealthy ? t('detailReady') : t('detailNotReady')}
             />
           </div>
 
@@ -233,9 +243,9 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Starting...
+                    {t('btnStarting')}
                   </span>
-                ) : 'Start Engine'}
+                ) : t('btnStartEngine')}
               </button>
             ) : (
               <button
@@ -243,13 +253,13 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
                 disabled={isStopping}
                 className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
-                {isStopping ? 'Stopping...' : 'Stop Engine'}
+                {isStopping ? t('btnStopping') : t('btnStopEngine')}
               </button>
             )}
             <button
               onClick={fetchStatus}
               className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
-              title="Refresh status"
+              title={t('btnRefreshStatus')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -260,13 +270,13 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
           {/* Workspace Configuration */}
           <div className="border-t border-gray-100 pt-3">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workspace</h4>
+              <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">{t('labelWorkspace')}</h4>
               {!isEditingPath && !dockerStatus?.container_running && (
                 <button
                   onClick={() => { setEditPath(workspacePath); setIsEditingPath(true); }}
                   className="text-xs text-blue-600 hover:text-blue-700"
                 >
-                  Modifier
+                  {t('btnEdit')}
                 </button>
               )}
             </div>
@@ -286,13 +296,13 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
                     disabled={isSavingConfig || !editPath.trim()}
                     className="flex-1 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {isSavingConfig ? 'Saving...' : 'Enregistrer'}
+                    {isSavingConfig ? t('btnSaving') : t('btnSave')}
                   </button>
                   <button
                     onClick={() => { setIsEditingPath(false); setConfigError(null); }}
                     className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs rounded-lg transition-colors"
                   >
-                    Annuler
+                    {t('btnCancel')}
                   </button>
                 </div>
               </div>
@@ -326,7 +336,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
                     const config = await updateConfig(workspacePath);
                     setWorkspaceConfig(config);
                   } catch (err: any) {
-                    setConfigError(err?.response?.data?.detail || 'Failed to create directories');
+                    setConfigError(err?.response?.data?.detail || t('errorCreateDirs'));
                   } finally {
                     setIsSavingConfig(false);
                   }
@@ -334,13 +344,13 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
                 disabled={isSavingConfig}
                 className="mt-2 w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
               >
-                {isSavingConfig ? 'Création...' : 'Créer les répertoires manquants'}
+                {isSavingConfig ? t('btnCreating') : t('btnCreateDirs')}
               </button>
             )}
 
             {dockerStatus?.container_running && (
               <p className="text-xs text-gray-400 mt-1 italic">
-                Arrêtez le container pour modifier le chemin
+                {t('stopContainerToEdit')}
               </p>
             )}
           </div>
@@ -348,7 +358,7 @@ const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({ onEngineStatusCha
           {/* Help text */}
           {!dockerStatus?.docker_running && (
             <p className="text-xs text-gray-500 text-center">
-              Please start Docker Desktop first
+              {t('startDockerFirst')}
             </p>
           )}
         </div>

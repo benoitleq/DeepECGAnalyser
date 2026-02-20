@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { useTranslation } from '../i18n/LanguageContext';
 
 interface ECGSignalData {
   success: boolean;
@@ -46,6 +47,7 @@ const COLORS = {
 };
 
 const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) => {
+  const { t } = useTranslation();
   const [signalData, setSignalData] = useState<ECGSignalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +68,10 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
         if (response.data.success) {
           setSignalData(response.data);
         } else {
-          setError(response.data.error || 'Failed to load ECG data');
+          setError(response.data.error || t('viewerError'));
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load ECG data');
+        setError(err instanceof Error ? err.message : t('viewerError'));
       } finally {
         setLoading(false);
       }
@@ -287,7 +289,7 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
     return (
       <div className="bg-gray-900 rounded-xl p-6 text-center">
         <div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-        <p className="text-gray-300">Chargement du tracé ECG...</p>
+        <p className="text-gray-300">{t('viewerLoading')}</p>
       </div>
     );
   }
@@ -295,9 +297,9 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
   if (error) {
     return (
       <div className="bg-red-900/20 border border-red-500 rounded-xl p-6 text-center">
-        <p className="text-red-400 font-medium mb-2">Erreur de chargement de l'ECG</p>
+        <p className="text-red-400 font-medium mb-2">{t('viewerError')}</p>
         <p className="text-red-300 text-sm">{error}</p>
-        <p className="text-gray-500 text-xs mt-2">Fichier recherché: {filename}</p>
+        <p className="text-gray-500 text-xs mt-2">{t('viewerFileSearched', { file: filename })}</p>
       </div>
     );
   }
@@ -310,7 +312,7 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            ECG 12 Dérivations
+            {t('viewerTitle')}
           </h3>
           <p className="text-sm text-gray-400">
             {signalData.duration_seconds.toFixed(1)}s @ {signalData.sample_rate}Hz |
@@ -320,7 +322,7 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
         {signalData.heart_rate && (
           <div className="flex flex-col items-center px-4">
             <span className="text-3xl font-bold text-red-400">{signalData.heart_rate}</span>
-            <span className="text-xs text-gray-400 uppercase tracking-wider">bpm</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider">{t('viewerBpm')}</span>
           </div>
         )}
         <div className="flex items-center gap-3">
@@ -329,9 +331,9 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
             onChange={(e) => setDisplaySeconds(parseFloat(e.target.value))}
             className="bg-gray-700 text-white px-3 py-2 rounded-lg text-sm"
           >
-            <option value={2.5}>2.5s par dérivation</option>
-            <option value={5}>5s par dérivation</option>
-            <option value={10}>10s par dérivation</option>
+            <option value={2.5}>{t('viewer2s')}</option>
+            <option value={5}>{t('viewer5s')}</option>
+            <option value={10}>{t('viewer10s')}</option>
           </select>
           {onClose && (
             <button
@@ -356,10 +358,10 @@ const ECGViewer: React.FC<ECGViewerProps> = ({ filename = 'ecg.xml', onClose }) 
       {/* Legend */}
       <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-700 pt-3">
         <div className="flex items-center gap-4">
-          <span>1 petit carré = 0.04s (40ms) | 0.1mV</span>
-          <span>1 grand carré = 0.2s (200ms) | 0.5mV</span>
+          <span>{t('viewerLegendSmall')}</span>
+          <span>{t('viewerLegendLarge')}</span>
         </div>
-        <span>Format: Standard 12 dérivations + tracé rythmique DII</span>
+        <span>{t('viewerLegendFormat')}</span>
       </div>
     </div>
   );

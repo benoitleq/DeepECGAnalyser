@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n/LanguageContext';
 
 export interface ECGModel {
   id: string;
@@ -21,6 +22,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   onSelectionChange,
   disabled = false,
 }) => {
+  const { t } = useTranslation();
   const [selectAll, setSelectAll] = useState(true);
   const [expandedArchitecture, setExpandedArchitecture] = useState<string | null>('efficientnet');
 
@@ -83,14 +85,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   };
 
   const getModelTypeLabel = (type: string) => {
-    return type === 'multi_label' ? '77 Classes' : 'Binaire';
+    return type === 'multi_label' ? t('modelType77') : t('modelTypeBinary');
   };
 
   return (
     <div className={`space-y-4 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
       {/* Header with Select All */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-800">Sélection des Modèles</h3>
+        <h3 className="text-lg font-semibold text-gray-800">{t('modelSelectorTitle')}</h3>
         <button
           onClick={handleSelectAll}
           className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -99,13 +101,13 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           }`}
         >
-          {selectAll ? 'Tout désélectionner' : 'Tout sélectionner'}
+          {selectAll ? t('deselectAll') : t('selectAll')}
         </button>
       </div>
 
       {/* Selection count */}
       <div className="text-sm text-gray-500">
-        {selectedModels.length} modèle{selectedModels.length !== 1 ? 's' : ''} sélectionné{selectedModels.length !== 1 ? 's' : ''} sur {availableModels.length}
+        {t('modelsSelectedCount', { selected: selectedModels.length, total: availableModels.length })}
       </div>
 
       {/* Models by Architecture */}
@@ -158,7 +160,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                     {architecture === 'efficientnet' ? 'EfficientNet V2' : 'WCR Transformer'}
                   </span>
                   <span className="ml-2 text-sm text-gray-500">
-                    ({models.length} modèles)
+                    {t('archModelsCount', { n: models.length })}
                   </span>
                 </div>
               </div>
@@ -237,7 +239,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           }}
           className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
         >
-          EfficientNet uniquement
+          {t('btnEfficientNetOnly')}
         </button>
         <button
           onClick={() => {
@@ -246,7 +248,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           }}
           className="flex-1 py-2 px-4 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
         >
-          WCR uniquement
+          {t('btnWcrOnly')}
         </button>
       </div>
     </div>
