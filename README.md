@@ -1,31 +1,42 @@
 # DeepECGAnalyser
-<img width="941" height="668" alt="image" src="https://github.com/user-attachments/assets/40427f59-070d-4b27-a2a7-f45f91265e58" />
-
 
 **AI-Powered ECG Analysis Platform using HeartWise Foundation Models**
 
 Local-first medical AI application for 12-lead ECG interpretation. Leverages the [HeartWise DeepECG Docker](https://github.com/HeartWise-AI/DeepECG_Docker) engine with EfficientNet and WCR (self-supervised) architectures across 77 diagnostic classes. All processing happens locally on your machine with GPU acceleration - no cloud, no external APIs, complete data privacy.
 
-<img width="713" height="519" alt="image" src="https://github.com/user-attachments/assets/f9a59634-a283-40c1-82b3-27657dc82a51" />
-
-<img width="674" height="577" alt="image" src="https://github.com/user-attachments/assets/a5d796b0-aed8-43c6-bbf8-f9d394b63589" />
-
+![Main interface](docs/screenshots/01_main_interface.png)
 
 ---
 
 ## Features
 
-- **Multi-Model Analysis**: 5 AI models (EfficientNet + WCR) for comprehensive ECG interpretation
+- **Multi-Model Analysis**: 8 AI models (EfficientNet V2 + WCR Transformer) for comprehensive ECG interpretation
 - **77 Diagnostic Classes**: Arrhythmias, conduction disorders, hypertrophy, ischemia, and more
-- **Binary Screening Models**: LVEF <= 40%, LVEF < 50%, Atrial Fibrillation risk at 5 years
+- **Binary Screening Models**: LVEF ≤ 40%, LVEF < 50%, Atrial Fibrillation risk at 5 years
 - **Model Comparison**: Side-by-side EfficientNet vs WCR results with probability differences
-- **Multi-Format Support**: GE MUSE XML, Philips PageWriter XML (auto-converted), NPY
-- **Batch Processing**: Analyze multiple ECG files at once
-- **ECG Visualization**: Interactive 12-lead ECG waveform viewer
+- **Multi-Format Support**: GE MUSE XML, Philips PageWriter XML, HL7 aECG XML, Schiller XML (auto-converted), NPY
+- **Batch Processing**: Analyze multiple ECG files at once with progress tracking
+- **ECG Visualization**: Interactive 12-lead ECG waveform viewer with grid and calibration pulse
 - **CSV Export**: Detailed results export with multi-model columns and diff
 - **GPU Accelerated**: NVIDIA CUDA-powered inference via Docker
 - **100% Local**: Zero data leaves your machine
+- **Bilingual UI**: English / French with persistent language preference
 - **Configurable Workspace**: Directories auto-created on first startup
+
+---
+
+## Screenshots
+
+### Main Interface (English)
+![Main interface - English](docs/screenshots/01_main_interface.png)
+
+### System Status & Workspace Panel
+![System status panel expanded](docs/screenshots/02_sidebar_expanded.png)
+
+### French UI (🇫🇷)
+![Interface in French](docs/screenshots/04_lang_toggle_fr.png)
+
+---
 
 ## Architecture
 
@@ -46,11 +57,14 @@ Local-first medical AI application for 12-lead ECG interpretation. Leverages the
 
 | Model ID | Name | Architecture | Type | Description |
 |----------|------|-------------|------|-------------|
-| `efficientnet_77` | ECG 77 Classes | EfficientNet | Multi-label (77) | Full ECG interpretation - supervised |
-| `wcr_77` | ECG 77 Classes (WCR) | WCR | Multi-label (77) | Full ECG interpretation - self-supervised |
-| `efficientnet_lvef40` | LVEF <= 40% | EfficientNet | Binary | Left ventricular ejection fraction screening |
-| `efficientnet_lvef50` | LVEF < 50% | EfficientNet | Binary | Left ventricular ejection fraction screening |
-| `efficientnet_af5y` | AF Risk 5 years | EfficientNet | Binary | Atrial fibrillation risk prediction |
+| `efficientnet_77` | 77 Classes ECG | EfficientNet V2 | Multi-label (77) | Full ECG interpretation - supervised |
+| `wcr_77` | 77 Classes ECG (WCR) | WCR Transformer | Multi-label (77) | Full ECG interpretation - self-supervised |
+| `efficientnet_lvef40` | LVEF ≤ 40% | EfficientNet V2 | Binary | Left ventricular ejection fraction screening |
+| `efficientnet_lvef50` | LVEF < 50% | EfficientNet V2 | Binary | Left ventricular ejection fraction screening |
+| `efficientnet_af5y` | AF Risk 5 years | EfficientNet V2 | Binary | Atrial fibrillation risk prediction |
+| `wcr_lvef40` | LVEF ≤ 40% (WCR) | WCR Transformer | Binary | LVEF screening - self-supervised |
+| `wcr_lvef50` | LVEF < 50% (WCR) | WCR Transformer | Binary | LVEF screening - self-supervised |
+| `wcr_af5y` | AF Risk 5 years (WCR) | WCR Transformer | Binary | AF risk - self-supervised |
 
 ---
 
@@ -104,7 +118,7 @@ docker build -t deepecg-docker .
 ### Step 2: Clone DeepECGAnalyser
 
 ```bash
-git clone https://github.com/YOUR_USER/DeepECGAnalyser.git
+git clone https://github.com/benoitleq/DeepECGAnalyser.git
 cd DeepECGAnalyser
 ```
 
@@ -134,7 +148,7 @@ npm install
 # Double-click start.bat or run:
 .\start.bat
 
-# Choose option 6: Dev complet (AI Engine + Backend + Frontend)
+# Choose option 6: Full Dev (AI Engine + Backend + Frontend)
 ```
 
 This will:
@@ -176,18 +190,23 @@ The AI Engine container can be started/stopped directly from the application UI 
 
 ### Single File Analysis
 
-1. Start the AI Engine from the sidebar (click "Start Engine")
-2. Select the AI models to use (EfficientNet, WCR, or both 77-class models)
+1. Start the AI Engine from the sidebar (click **"Start Engine"**)
+2. Select the AI models to use (EfficientNet, WCR, or both)
 3. Drag & drop an ECG file (XML or NPY) or click to browse
 4. View results: summary, per-category breakdown, all diagnoses, and model comparison
 5. Export results to CSV
 
 ### Batch Analysis
 
-1. Toggle "Mode Lot" (batch mode)
+1. Toggle **"Batch Mode"**
 2. Select multiple ECG files
-3. Navigate results per file with previous/next controls
-4. Export all results to CSV
+3. Monitor per-file progress during analysis
+4. Navigate results per file with previous/next controls
+5. Export all results to CSV
+
+### Language Toggle
+
+The interface is available in **English** (default) and **French**. Use the language button at the top of the sidebar panel (🇫🇷 Français / 🇬🇧 English) to switch. Your preference is saved automatically.
 
 ### Model Comparison
 
@@ -203,12 +222,24 @@ The workspace directory stores ECG files and analysis outputs. It is mounted as 
 ```
 WORKSPACE_PATH/
   ecg_signals/      # Uploaded ECG files
-  inputs/            # Input data for the AI engine
-  outputs/           # Analysis results (probabilities CSVs)
-  preprocessing/     # Preprocessed data (base64 tensors)
+  inputs/           # Input data for the AI engine
+  outputs/          # Analysis results (probabilities CSVs)
+  preprocessing/    # Preprocessed data (base64 tensors)
 ```
 
 Directories are auto-created on first startup. The path is persisted in `backend/app/config.json` and can be changed from the UI when the container is stopped.
+
+---
+
+## Supported ECG Formats
+
+| Format | Description | Conversion |
+|--------|-------------|-----------|
+| GE MUSE XML | Native GE ECG format | Native support |
+| Philips PageWriter XML | Philips ECG export | Auto-converted to GE MUSE |
+| HL7 aECG XML | Standard HL7 annotated ECG | Auto-converted |
+| Schiller XML | Schiller ECG devices | Auto-converted |
+| NPY | NumPy arrays (12 leads × samples) | Native support |
 
 ---
 
@@ -261,6 +292,7 @@ DeepECGAnalyser/
 │   │   ├── schemas.py              # Pydantic response models
 │   │   ├── settings.py             # Configuration (env + config.json)
 │   │   ├── philips_converter.py    # Philips PageWriter -> GE MUSE conversion
+│   │   ├── hl7_aecg_converter.py   # HL7 aECG -> GE MUSE conversion
 │   │   ├── security.py             # File validation & sanitization
 │   │   ├── circuit_breaker.py      # Resilience pattern
 │   │   └── utils.py                # Utility functions
@@ -270,17 +302,22 @@ DeepECGAnalyser/
 │   ├── src/
 │   │   ├── App.tsx                 # Root component, layout
 │   │   ├── api.ts                  # Axios API client
+│   │   ├── i18n/
+│   │   │   ├── translations.ts     # EN/FR translation dictionary
+│   │   │   └── LanguageContext.tsx # React language context + useTranslation hook
 │   │   └── components/
 │   │       ├── ECGAnalysisPanel.tsx    # Main analysis interface
 │   │       ├── ECGVisualResults.tsx    # Results display (tabs, comparison)
 │   │       ├── ECGViewer.tsx           # 12-lead ECG waveform viewer
 │   │       ├── ModelSelector.tsx       # AI model selection UI
-│   │       ├── SystemStatusPanel.tsx   # Docker status + workspace config
+│   │       ├── SystemStatusPanel.tsx   # Docker status + workspace config + language toggle
 │   │       └── ConfidenceBadge.tsx     # Probability confidence indicator
 │   ├── package.json
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
 │   └── Dockerfile
+├── docs/
+│   └── screenshots/                # UI screenshots
 ├── docker-compose.yml              # Full stack orchestration
 ├── start.bat                       # Windows launcher (menu-based)
 ├── start-ai-engine.ps1             # PowerShell AI Engine launcher
@@ -335,14 +372,16 @@ docker restart deepecg-ai-engine
 ### Workspace Issues
 
 - Check workspace path in the sidebar panel (expand AI Engine section)
-- Click "Creer les repertoires manquants" if subdirectories are missing
+- Click **"Create missing directories"** if subdirectories are missing
 - Ensure the parent directory exists before setting a new workspace path
 
 ### File Format Issues
 
 - **GE MUSE XML**: Supported natively
 - **Philips PageWriter XML**: Auto-converted to GE MUSE format
-- **NPY**: NumPy arrays (12 leads x samples)
+- **HL7 aECG XML**: Auto-converted to GE MUSE format
+- **Schiller XML**: Auto-converted to GE MUSE format
+- **NPY**: NumPy arrays (12 leads × samples)
 - **UTF-16 XML**: Auto-converted to UTF-8
 
 ---
@@ -355,6 +394,23 @@ docker restart deepecg-ai-engine
 | Backend | FastAPI, Python 3.11, Pydantic, Uvicorn |
 | AI Engine | [HeartWise DeepECG Docker](https://github.com/HeartWise-AI/DeepECG_Docker), PyTorch, CUDA |
 | Infrastructure | Docker, Docker Compose, NVIDIA Container Toolkit |
+
+## Changelog
+
+### v1.3
+- Bilingual interface: English (default) + French, with language toggle in sidebar
+- Language preference persisted via localStorage
+
+### v1.2
+- WCR binary models (LVEF ≤ 40%, LVEF < 50%, AF risk 5 years) added
+- Batch mode per-file progress display
+- HL7 aECG XML multi-format support (Schiller, Cardiosoft, standard)
+- Various bug fixes
+
+### v1.1
+- Multi-vendor XML support (Philips PageWriter auto-conversion)
+- Interactive 12-lead ECG waveform viewer
+- Model comparison tab (EfficientNet vs WCR diff)
 
 ## Citation
 
@@ -387,7 +443,7 @@ This application uses the HeartWise AI engine. If you use it, please cite:
 
 ## License
 
-Ce projet est sous licence **GPL v3**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+This project is licensed under the **GPL v3**. See the [LICENSE](LICENSE) file for details.
 
 ---
 
