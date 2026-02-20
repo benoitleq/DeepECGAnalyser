@@ -613,6 +613,9 @@ def _convert_hl7_aecg(xml_path: str) -> Tuple[bool, str]:
 
             # Map MDC lead code to standard name
             lead_name = code_val.replace('MDC_ECG_LEAD_', '')
+            # Normalize Schiller-style names: AVR/AVL/AVF → aVR/aVL/aVF
+            lead_name_map = {'AVR': 'aVR', 'AVL': 'aVL', 'AVF': 'aVF'}
+            lead_name = lead_name_map.get(lead_name, lead_name)
 
             value_elem = sequence.find(ns_tag('value'))
             if value_elem is None:

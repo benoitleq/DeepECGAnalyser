@@ -1043,6 +1043,9 @@ async def _parse_xml_waveform(xml_path: str, filename: str) -> dict:
                     continue
 
                 lead_name = code_val.replace('MDC_ECG_LEAD_', '')
+                # Normalize Schiller-style names: AVR/AVL/AVF → aVR/aVL/aVF
+                lead_name_map = {'AVR': 'aVR', 'AVL': 'aVL', 'AVF': 'aVF'}
+                lead_name = lead_name_map.get(lead_name, lead_name)
                 value_elem = sequence.find(f'{ns}value')
                 if value_elem is None:
                     continue
