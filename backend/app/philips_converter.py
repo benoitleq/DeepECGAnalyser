@@ -8,8 +8,8 @@ Philips PageWriter TC uses:
 - XLI compression for main waveforms (proprietary)
 - Uncompressed Base64 for representative beats (<repbeats>)
 
-This converter extracts the representative beats and creates a GE MUSE-compatible
-XML file that can be processed by HeartWise.
+This converter decodes the full XLI-compressed parsedwaveforms (10s rhythm)
+and uses the repbeats only for the Median waveform section.
 """
 
 import base64
@@ -20,10 +20,14 @@ import zlib
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # 8-lead order (leads that GE MUSE stores, others are derived)
 LEAD_ORDER_8 = ['I', 'II', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
+# Full 12-lead order used when XLI decode provides all leads
+LEAD_ORDER_12 = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
 
 
 def detect_philips_pagewriter(xml_path: str) -> bool:
@@ -200,70 +204,88 @@ def extract_philips_patient_info(root: ET.Element, ns: Dict[str, str]) -> Dict[s
 
 def extract_philips_waveforms(xml_path: str) -> Tuple[Dict[str, List[int]], Dict[str, str], int]:
     """
-    Extract waveform data from Philips PageWriter XML.
+    Extract rhythm waveform data from Philips PageWriter XML.
+
+    Primary path : XLI-decode parsedwaveforms → full 10-second rhythm (12 leads).
+    Fallback     : repbeats (1.2 s representative beat, looped to 10 s) — same
+                   behaviour as before, used only when XLI decode fails.
 
     Returns:
         Tuple of (lead_data dict, patient_info dict, sampling_rate)
     """
-    lead_data = {}
-    patient_info = {}
+    lead_data: Dict[str, List[int]] = {}
+    patient_info: Dict[str, str] = {}
     sampling_rate = 500
 
     try:
         tree = ET.parse(xml_path)
         root = tree.getroot()
-
         ns = {}
         if root.tag.startswith('{'):
             ns_uri = root.tag.split('}')[0] + '}'
             ns = {'': ns_uri[1:-1]}
-
         patient_info = extract_philips_patient_info(root, ns)
+    except Exception as e:
+        logger.error(f"Error parsing Philips XML: {e}")
+        return lead_data, patient_info, sampling_rate
 
-        # Find repbeats section
-        repbeats = None
+    # ── Primary path: XLI parsedwaveforms ────────────────────────────────────
+    try:
+        from .sierraecg.decode import decode_rhythm
+        rhythm_leads, sampling_rate = decode_rhythm(xml_path)
+        for label, arr in rhythm_leads.items():
+            lead_data[label] = arr.tolist()
+        logger.info(
+            f"XLI decode: {len(lead_data)} leads, {next(iter(rhythm_leads.values())).shape[0]} samples @ {sampling_rate} Hz"
+        )
+        return lead_data, patient_info, sampling_rate
+    except Exception as e:
+        logger.warning(f"XLI decode failed ({e}), falling back to repbeats")
+
+    # ── Fallback: repbeats ────────────────────────────────────────────────────
+    try:
+        repbeats_elem = None
         for elem in root.iter():
             if 'repbeats' in elem.tag.lower():
-                repbeats = elem
+                repbeats_elem = elem
                 break
 
-        if repbeats is None:
+        if repbeats_elem is None:
             logger.warning("No repbeats section found in Philips XML")
             return lead_data, patient_info, sampling_rate
 
-        sps = repbeats.get('samplespersec')
+        sps = repbeats_elem.get('samplespersec')
         if sps:
             sampling_rate = int(sps)
 
-        for repbeat in repbeats.iter():
+        for repbeat in repbeats_elem.iter():
             if 'repbeat' in repbeat.tag.lower():
                 lead_name = repbeat.get('leadname', '')
                 if not lead_name:
                     continue
-
                 waveform = None
                 for child in repbeat:
                     if 'waveform' in child.tag.lower():
                         waveform = child
                         break
-
                 if waveform is not None and waveform.text:
                     samples = decode_philips_waveform(waveform.text)
                     if samples:
                         lead_data[lead_name] = samples
-                        logger.debug(f"Extracted {len(samples)} samples for lead {lead_name}")
+                        logger.debug(f"Repbeat: {len(samples)} samples for lead {lead_name}")
 
-        logger.info(f"Extracted {len(lead_data)} leads from Philips XML")
-
+        logger.info(f"Repbeat fallback: {len(lead_data)} leads")
     except Exception as e:
-        logger.error(f"Error extracting Philips waveforms: {e}")
+        logger.error(f"Error extracting repbeats: {e}")
 
     return lead_data, patient_info, sampling_rate
 
 
 def create_muse_xml(lead_data: Dict[str, List[int]], patient_info: Dict[str, str],
                     original_rate: int = 1000, target_rate: int = 500,
-                    target_duration_ms: int = 10000) -> str:
+                    target_duration_ms: int = 10000,
+                    median_lead_data: Optional[Dict[str, List[int]]] = None,
+                    median_rate: int = 1000) -> str:
     """
     Create GE MUSE RestingECG format XML from extracted lead data.
 
@@ -272,11 +294,13 @@ def create_muse_xml(lead_data: Dict[str, List[int]], patient_info: Dict[str, str
     - Index 1: Rhythm (~5000 samples, 10-second strip)
 
     Args:
-        lead_data: Dictionary mapping lead names to sample lists
+        lead_data: Rhythm lead data (12 leads from XLI decode, or 8 from repbeat fallback)
         patient_info: Patient information dictionary
-        original_rate: Original sampling rate from Philips
-        target_rate: Target sampling rate (Hz) - GE MUSE uses 500
-        target_duration_ms: Target duration in milliseconds
+        original_rate: Sampling rate of lead_data (Hz)
+        target_rate: Target sampling rate (Hz) — GE MUSE uses 500
+        target_duration_ms: Target rhythm duration in milliseconds
+        median_lead_data: Optional separate repbeat data for Median section
+        median_rate: Sampling rate of median_lead_data (Hz)
 
     Returns:
         GE MUSE RestingECG XML string
@@ -285,19 +309,29 @@ def create_muse_xml(lead_data: Dict[str, List[int]], patient_info: Dict[str, str
     # Median beat: ~1.2 seconds at 500Hz = 600 samples
     median_samples = 600
 
-    # Process waveforms for Rhythm (10s strip)
+    # Determine lead order: 12 leads if available, else 8
+    rhythm_order = [l for l in LEAD_ORDER_12 if l in lead_data] or \
+                   [l for l in LEAD_ORDER_8  if l in lead_data]
+
+    # ── Rhythm (Waveform[1]) ──────────────────────────────────────────────────
     processed_leads = {}
-    # Keep original repbeat data for Median section
+    for lead_name in rhythm_order:
+        samples = lead_data[lead_name]
+        resampled = resample_waveform(samples, original_rate, target_rate)
+        # If already at target length (XLI path), clip/keep as-is; otherwise extend (repbeat fallback)
+        processed_leads[lead_name] = extend_to_duration(resampled, target_samples)
+
+    # ── Median (Waveform[0]) ──────────────────────────────────────────────────
     median_leads = {}
-    for lead_name in LEAD_ORDER_8:
-        if lead_name in lead_data:
-            samples = lead_data[lead_name]
-            resampled = resample_waveform(samples, original_rate, target_rate)
-            # Median: use the repbeat data directly (truncate/pad to 600 samples)
-            median_leads[lead_name] = extend_to_duration(resampled, median_samples)
-            # Rhythm: extend to 10s
-            extended = extend_to_duration(resampled, target_samples)
-            processed_leads[lead_name] = extended
+    median_source = median_lead_data if median_lead_data else lead_data
+    median_source_rate = median_rate if median_lead_data else original_rate
+    median_order = [l for l in LEAD_ORDER_12 if l in median_source] or \
+                   [l for l in LEAD_ORDER_8  if l in median_source]
+
+    for lead_name in median_order:
+        samples = median_source[lead_name]
+        resampled = resample_waveform(samples, median_source_rate, target_rate)
+        median_leads[lead_name] = extend_to_duration(resampled, median_samples)
 
     # Build GE MUSE RestingECG XML
     xml_parts = []
@@ -355,7 +389,7 @@ def create_muse_xml(lead_data: Dict[str, List[int]], patient_info: Dict[str, str
     xml_parts.append('      <LowPassFilter>150</LowPassFilter>')
     xml_parts.append('      <ACFilter>60</ACFilter>')
 
-    for lead_name in LEAD_ORDER_8:
+    for lead_name in median_order:
         if lead_name in median_leads:
             samples = median_leads[lead_name]
             b64_data = encode_muse_waveform(samples)
@@ -398,7 +432,7 @@ def create_muse_xml(lead_data: Dict[str, List[int]], patient_info: Dict[str, str
     xml_parts.append('      <LowPassFilter>150</LowPassFilter>')
     xml_parts.append('      <ACFilter>60</ACFilter>')
 
-    for lead_name in LEAD_ORDER_8:
+    for lead_name in rhythm_order:
         if lead_name in processed_leads:
             samples = processed_leads[lead_name]
             b64_data = encode_muse_waveform(samples)
@@ -455,7 +489,23 @@ def convert_philips_to_muse(input_path: str, output_path: Optional[str] = None) 
         if len(lead_data) < 8:
             return False, f"Insufficient leads extracted: {len(lead_data)}/8 minimum"
 
-        muse_xml = create_muse_xml(lead_data, patient_info, original_rate=sampling_rate)
+        # Extract repbeats separately for the Median waveform section
+        median_data: Optional[Dict[str, List[int]]] = None
+        median_rate = 1000
+        try:
+            from .sierraecg.decode import decode_repbeats
+            median_data, median_rate = decode_repbeats(input_path)
+            if not median_data:
+                median_data = None
+        except Exception as e:
+            logger.debug(f"Repbeats extraction for Median skipped: {e}")
+
+        muse_xml = create_muse_xml(
+            lead_data, patient_info,
+            original_rate=sampling_rate,
+            median_lead_data=median_data,
+            median_rate=median_rate,
+        )
 
         if output_path is None:
             output_path = input_path

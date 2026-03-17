@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 CONFIG_FILE = Path(__file__).parent / "config.json"
 
 # Workspace subdirectories that should always exist
-WORKSPACE_SUBDIRS = ["ecg_signals", "inputs", "outputs", "preprocessing"]
+WORKSPACE_SUBDIRS = ["ecg_signals", "inputs", "outputs", "preprocessing", "hf_cache"]
 
 
 def load_config() -> dict:

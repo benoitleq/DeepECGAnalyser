@@ -189,13 +189,30 @@ async def start_ai_engine(
     # Port mapping (not used for batch processing, but keep for compatibility)
     # cmd.extend(["-p", f"{AI_ENGINE_PORT}:{AI_ENGINE_PORT}"])
 
+    # HuggingFace: longer timeout for model downloads (default 10s is too short)
+    cmd.extend(["-e", "HF_HUB_DOWNLOAD_TIMEOUT=120"])
+
     # Mount data directory to /data if workspace provided (not /workspace!)
     if workspace_path:
         cmd.extend(["-v", f"{workspace_path}:/data"])
 
+        # Mount HuggingFace model cache so models persist across container restarts.
+        # On first run models download into hf_cache/; subsequent runs load from disk.
+        import os
+        hf_cache_dir = os.path.join(workspace_path, "hf_cache")
+        os.makedirs(hf_cache_dir, exist_ok=True)
+        cmd.extend(["-v", f"{hf_cache_dir}:/root/.cache/huggingface"])
+        logger.info(f"Mounting HuggingFace cache: {hf_cache_dir}")
+
+        # Mount /app/weights so downloaded model weights persist across container restarts.
+        # Models like wcr_77_classes are downloaded to /app/weights/ inside the container.
+        weights_dir = os.path.join(workspace_path, "weights")
+        os.makedirs(weights_dir, exist_ok=True)
+        cmd.extend(["-v", f"{weights_dir}:/app/weights"])
+        logger.info(f"Mounting weights cache: {weights_dir}")
+
         # Mount patched ecg_signal_processor.py if it exists
         # This fixes bugs with np.squeeze and hardcoded 12 leads
-        import os
         patched_file = os.path.join(workspace_path, "ecg_signal_processor.py")
         if os.path.exists(patched_file):
             cmd.extend(["-v", f"{patched_file}:/app/utils/ecg_signal_processor.py"])
@@ -215,10 +232,15 @@ async def start_ai_engine(
         if "gpu" in stderr.lower() or "nvidia" in stderr.lower():
             logger.warning("GPU failed, retrying without GPU...")
             cmd = ["docker", "run", "-d", "--name", CONTAINER_NAME]
+            cmd.extend(["-e", "HF_HUB_DOWNLOAD_TIMEOUT=120"])
             if workspace_path:
                 cmd.extend(["-v", f"{workspace_path}:/data"])
-                # Also mount patched file for CPU fallback
-                import os
+                hf_cache_dir = os.path.join(workspace_path, "hf_cache")
+                os.makedirs(hf_cache_dir, exist_ok=True)
+                cmd.extend(["-v", f"{hf_cache_dir}:/root/.cache/huggingface"])
+                weights_dir = os.path.join(workspace_path, "weights")
+                os.makedirs(weights_dir, exist_ok=True)
+                cmd.extend(["-v", f"{weights_dir}:/app/weights"])
                 patched_file = os.path.join(workspace_path, "ecg_signal_processor.py")
                 if os.path.exists(patched_file):
                     cmd.extend(["-v", f"{patched_file}:/app/utils/ecg_signal_processor.py"])
