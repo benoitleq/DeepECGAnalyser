@@ -905,20 +905,40 @@ def _calculate_heart_rate(leads_data: dict, sample_rate: float) -> int | None:
         return None
     try:
         import numpy as np
-        signal = np.array(leads_data[hr_lead])
-        min_distance = int(sample_rate * 0.4)  # Min 0.4s between beats
-        threshold = np.mean(signal) + 0.5 * np.std(signal)
+        signal = np.array(leads_data[hr_lead], dtype=float)
+
+        # Skip first second to avoid calibration pulses
+        skip = int(sample_rate)
+        signal = signal[skip:]
+
+        if len(signal) < int(sample_rate * 2):
+            return None
+
+        min_distance = int(sample_rate * 0.4)  # Refractory: min 0.4s (max 150 bpm)
+
+        # Robust threshold: use median + 1.5 * MAD (ignores outliers/spikes)
+        median = np.median(signal)
+        mad = np.median(np.abs(signal - median))
+        threshold = median + max(1.5 * mad, 0.3 * (np.max(signal) - median))
+
         peaks = []
         for i in range(1, len(signal) - 1):
             if signal[i] > threshold and signal[i] > signal[i-1] and signal[i] > signal[i+1]:
                 if not peaks or (i - peaks[-1]) >= min_distance:
                     peaks.append(i)
+
         if len(peaks) >= 2:
             rr_intervals = np.diff(peaks) / sample_rate
-            mean_rr = np.mean(rr_intervals)
+            # Filter outlier R-R intervals (keep within 25% of median)
+            median_rr = np.median(rr_intervals)
+            rr_clean = rr_intervals[np.abs(rr_intervals - median_rr) < 0.25 * median_rr]
+            if len(rr_clean) == 0:
+                rr_clean = rr_intervals
+            mean_rr = np.mean(rr_clean)
             hr = round(60.0 / mean_rr)
-            logger.info(f"Heart rate from {hr_lead}: {hr} bpm ({len(peaks)} R-peaks)")
-            return hr
+            if 20 <= hr <= 300:  # Physiological range check
+                logger.info(f"Heart rate from {hr_lead}: {hr} bpm ({len(peaks)} R-peaks, {len(rr_clean)}/{len(rr_intervals)} R-R used)")
+                return hr
     except Exception as e:
         logger.warning(f"Heart rate calculation failed: {e}")
     return None
