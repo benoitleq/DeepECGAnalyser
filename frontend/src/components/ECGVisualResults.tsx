@@ -252,12 +252,12 @@ const BinaryResultCard: React.FC<{
   };
 
   return (
-    <div className={`p-5 rounded-xl ${config.bgLight} ${config.borderColor} border-2`}>
+    <div className={`p-5 rounded-xl ${config.bgLight} ${config.borderColor} border-2 flex flex-col`}>
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{getModelIcon(modelId)}</span>
           <div>
-            <h4 className="font-bold text-gray-800">{modelName}</h4>
+            <h4 className="font-bold text-gray-800">{modelName.replace(/\s*\(.*?\)/, '')}</h4>
             <p className="text-sm text-gray-500">{result.architecture.toUpperCase()}</p>
           </div>
         </div>
@@ -639,7 +639,7 @@ const ECGVisualResults: React.FC<ECGVisualResultsProps> = ({ result, onReset }) 
           {binaryResults.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3">{t('predictionModels')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
                 {binaryResults.map(([modelId, modelResult]) => (
                   <BinaryResultCard
                     key={modelId}
