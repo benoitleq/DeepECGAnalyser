@@ -114,6 +114,11 @@ const ProgressBar: React.FC<{
   thresholdLabel: string;
 }> = ({ value, threshold, status, thresholdLabel }) => {
   const config = getStatusConfig(status);
+  // Dynamic scale: show at least up to 2× the threshold so bar is always readable,
+  // and never less than 5% to avoid everything cramped at the left edge.
+  const scale = Math.max(value, threshold * 2, 5);
+  const fillPct = Math.min((value / scale) * 100, 100);
+  const markerPct = Math.min((threshold / scale) * 100, 100);
 
   return (
     <div className="relative w-full h-3">
@@ -121,13 +126,13 @@ const ProgressBar: React.FC<{
       <div className="absolute inset-0 bg-gray-200 rounded-full overflow-hidden">
         <div
           className={`absolute h-full ${config.bgColor} transition-all duration-500`}
-          style={{ width: `${Math.min(value, 100)}%` }}
+          style={{ width: `${fillPct}%` }}
         />
       </div>
       {/* Threshold marker — outside overflow-hidden so it's always visible */}
       <div
         className="absolute top-0 h-full w-0.5 bg-gray-700"
-        style={{ left: `${threshold}%` }}
+        style={{ left: `${markerPct}%` }}
         title={thresholdLabel}
       />
     </div>
