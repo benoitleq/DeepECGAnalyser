@@ -513,11 +513,20 @@ DIAGNOSIS_THRESHOLDS = {
     "Ventricular Rhythm": 0.33, "no_qrs": 0.27
 }
 
-# Binary model thresholds (default 0.5)
+# Binary model thresholds — optimal sensitivity/specificity thresholds from HeartWise
+# Source: HeartWise-AI/DeepECG_Docker thresholds/digital_biomarker_final.json (2026-03-13)
+# SL = EfficientNet (supervised learning), SSL = WCR Transformer (self-supervised learning)
 BINARY_THRESHOLDS = {
-    "lvef_40": 0.5,
-    "lvef_50": 0.5,
-    "afib_5y": 0.5,
+    "efficientnet": {
+        "lvef_40":  0.197,
+        "lvef_50":  0.268,
+        "afib_5y":  0.207,
+    },
+    "wcr": {
+        "lvef_40":  0.002,
+        "lvef_50":  0.032,
+        "afib_5y":  0.231,
+    },
 }
 
 # "Normal" baseline findings - these are GOOD when detected (high probability)
@@ -626,19 +635,22 @@ def parse_probabilities_csv(csv_path: str, model_type: str = "multi_label") -> D
                     logger.error(f"Could not parse predictions value: {row.get('predictions')}")
                     return results
 
-                # Determine diagnosis name from the CSV filename
+                # Determine diagnosis name and threshold from the CSV filename
+                # architecture is passed via model_type string e.g. "binary_wcr" or "binary_efficientnet"
                 csv_basename = os.path.basename(csv_path)
+                arch = "wcr" if "wcr" in csv_basename else "efficientnet"
+                thresholds_for_arch = BINARY_THRESHOLDS.get(arch, BINARY_THRESHOLDS["efficientnet"])
                 if "lvef_equal_under_40" in csv_basename or "lvef_40" in csv_basename:
                     diagnosis_name = "LVEF ≤40%"
-                    threshold = 0.5  # 50% threshold for LVEF
+                    threshold = thresholds_for_arch["lvef_40"]
                     category = "Fonction Ventriculaire"
                 elif "lvef_under_50" in csv_basename or "lvef_50" in csv_basename:
                     diagnosis_name = "LVEF <50%"
-                    threshold = 0.5
+                    threshold = thresholds_for_arch["lvef_50"]
                     category = "Fonction Ventriculaire"
                 elif "afib" in csv_basename:
                     diagnosis_name = "Risque FA 5 ans"
-                    threshold = 0.5
+                    threshold = thresholds_for_arch["afib_5y"]
                     category = "Arythmies"
                 else:
                     diagnosis_name = "Prédiction"
