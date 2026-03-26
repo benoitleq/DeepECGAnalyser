@@ -7,3 +7,4 @@ pdfminer.six==20231228
 httpx==0.25.2
 python-json-logger==2.0.7
 numpy>=1.24.0
+scipy>=1.10.0

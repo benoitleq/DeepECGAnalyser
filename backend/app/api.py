@@ -899,46 +899,99 @@ async def _get_signal_from_base64(base64_path: str) -> dict:
 
 
 def _calculate_heart_rate(leads_data: dict, sample_rate: float) -> int | None:
-    """Calculate heart rate from R-peaks in lead II (or I as fallback)."""
+    """
+    Calculate heart rate using a simplified Pan-Tompkins QRS detector.
+
+    Steps:
+      1. Skip first second (calibration pulse)
+      2. Bandpass 5–15 Hz  (isolates QRS, removes baseline wander & HF noise)
+      3. Derivative          (emphasises steep QRS slopes)
+      4. Squaring            (all-positive, amplifies large differences)
+      5. Moving-window integration  (smooths and broadens QRS feature)
+      6. Adaptive dual-threshold peak detection (signal + noise thresholds)
+      7. R-R outlier filtering + physiological range check
+    """
     hr_lead = 'II' if 'II' in leads_data else ('I' if 'I' in leads_data else None)
-    if not hr_lead or sample_rate <= 0 or len(leads_data.get(hr_lead, [])) <= sample_rate:
+    if not hr_lead or sample_rate <= 0:
         return None
     try:
         import numpy as np
+        from scipy.signal import butter, filtfilt
+
         signal = np.array(leads_data[hr_lead], dtype=float)
+        fs = float(sample_rate)
 
-        # Skip first second to avoid calibration pulses
-        skip = int(sample_rate)
+        # 1. Skip first second (calibration pulse)
+        skip = int(fs)
         signal = signal[skip:]
-
-        if len(signal) < int(sample_rate * 2):
+        if len(signal) < int(fs * 3):
             return None
 
-        min_distance = int(sample_rate * 0.4)  # Refractory: min 0.4s (max 150 bpm)
+        # 2. Bandpass 5–15 Hz
+        nyq = fs / 2.0
+        low, high = 5.0 / nyq, min(15.0 / nyq, 0.99)
+        b, a = butter(2, [low, high], btype='band')
+        filtered = filtfilt(b, a, signal)
 
-        # Robust threshold: use median + 1.5 * MAD (ignores outliers/spikes)
-        median = np.median(signal)
-        mad = np.median(np.abs(signal - median))
-        threshold = median + max(1.5 * mad, 0.3 * (np.max(signal) - median))
+        # 3. Five-point derivative  (Δ = (−2x[n−2] − x[n−1] + x[n+1] + 2x[n+2]) / 8)
+        diff = np.zeros_like(filtered)
+        diff[2:-2] = (
+            -2 * filtered[:-4] - filtered[1:-3]
+            + filtered[3:-1] + 2 * filtered[4:]
+        ) / 8.0
+
+        # 4. Squaring
+        squared = diff ** 2
+
+        # 5. Moving-window integration  (150 ms window)
+        win = max(1, int(0.150 * fs))
+        kernel = np.ones(win) / win
+        integrated = np.convolve(squared, kernel, mode='same')
+
+        # 6. Adaptive dual-threshold peak detection
+        refractory = int(0.200 * fs)   # 200 ms — absolute refractory period
+        spki = 0.0                      # running signal-peak estimate
+        npki = 0.0                      # running noise-peak estimate
+        # Initialise from first 2 s
+        init = integrated[:int(2 * fs)]
+        spki = np.percentile(init, 90)
+        npki = np.percentile(init, 50)
 
         peaks = []
-        for i in range(1, len(signal) - 1):
-            if signal[i] > threshold and signal[i] > signal[i-1] and signal[i] > signal[i+1]:
-                if not peaks or (i - peaks[-1]) >= min_distance:
-                    peaks.append(i)
+        i = 1
+        while i < len(integrated) - 1:
+            # Local maximum
+            if integrated[i] > integrated[i - 1] and integrated[i] > integrated[i + 1]:
+                threshold1 = npki + 0.25 * (spki - npki)
+                if integrated[i] >= threshold1:
+                    # Enforce refractory period
+                    if not peaks or (i - peaks[-1]) >= refractory:
+                        peaks.append(i)
+                        spki = 0.125 * integrated[i] + 0.875 * spki
+                    else:
+                        # Inside refractory: keep the larger peak
+                        if integrated[i] > integrated[peaks[-1]]:
+                            peaks[-1] = i
+                else:
+                    npki = 0.125 * integrated[i] + 0.875 * npki
+            i += 1
 
-        if len(peaks) >= 2:
-            rr_intervals = np.diff(peaks) / sample_rate
-            # Filter outlier R-R intervals (keep within 25% of median)
-            median_rr = np.median(rr_intervals)
-            rr_clean = rr_intervals[np.abs(rr_intervals - median_rr) < 0.25 * median_rr]
-            if len(rr_clean) == 0:
-                rr_clean = rr_intervals
-            mean_rr = np.mean(rr_clean)
-            hr = round(60.0 / mean_rr)
-            if 20 <= hr <= 300:  # Physiological range check
-                logger.info(f"Heart rate from {hr_lead}: {hr} bpm ({len(peaks)} R-peaks, {len(rr_clean)}/{len(rr_intervals)} R-R used)")
-                return hr
+        if len(peaks) < 2:
+            return None
+
+        # 7. R-R filtering and HR estimate
+        rr = np.diff(np.array(peaks)) / fs
+        median_rr = np.median(rr)
+        # Keep R-R within ±25 % of median (discard ectopics / artefacts)
+        rr_clean = rr[np.abs(rr - median_rr) <= 0.25 * median_rr]
+        if len(rr_clean) < 2:
+            rr_clean = rr
+        hr = round(60.0 / np.mean(rr_clean))
+        if 20 <= hr <= 300:
+            logger.info(f"HR (Pan-Tompkins) from {hr_lead}: {hr} bpm "
+                        f"({len(peaks)} peaks, {len(rr_clean)}/{len(rr)} R-R used)")
+            return hr
+
     except Exception as e:
         logger.warning(f"Heart rate calculation failed: {e}")
     return None
