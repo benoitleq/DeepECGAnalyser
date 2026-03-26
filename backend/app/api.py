@@ -1104,12 +1104,42 @@ async def _parse_xml_waveform(xml_path: str, filename: str) -> dict:
             return {"error": "No waveform data found in HL7 aECG", "success": False}
 
         if is_philips:
-            # Philips PageWriter: <repbeats><repbeat leadname="I"><waveform duration="1200">base64</waveform></repbeat>
+            # Philips: use decode_rhythm() to get the full 10s parsedwaveforms signal.
+            # Fallback to repbeats if parsedwaveforms is unavailable.
+            try:
+                from .sierraecg.decode import decode_rhythm
+                rhythm_leads, philips_sr = decode_rhythm(xml_path)
+                if rhythm_leads:
+                    for lead_name, arr in rhythm_leads.items():
+                        mv_data = (arr / 1000.0).tolist()  # µV → mV
+                        leads_data[lead_name] = mv_data
+                        samples_per_lead = max(samples_per_lead, len(mv_data))
+                    sample_rate = philips_sr
+                    available_leads = [l for l in standard_leads if l in leads_data]
+                    duration_seconds = samples_per_lead / sample_rate if sample_rate > 0 else 0
+                    logger.info(f"Parsed Philips rhythm: {len(leads_data)} leads, {samples_per_lead} samples at {sample_rate}Hz")
+                    result = {
+                        "success": True,
+                        "filename": filename,
+                        "leads": available_leads,
+                        "samples_per_lead": samples_per_lead,
+                        "original_samples": samples_per_lead,
+                        "sample_rate": sample_rate,
+                        "duration_seconds": duration_seconds,
+                        "data": leads_data,
+                        "source": "xml"
+                    }
+                    heart_rate = _calculate_heart_rate(leads_data, sample_rate)
+                    if heart_rate is not None:
+                        result["heart_rate"] = heart_rate
+                    return result
+            except Exception as e:
+                logger.warning(f"Philips decode_rhythm failed ({e}), falling back to repbeats")
+
+            # Fallback: repbeats (1.2s representative beat)
             ns = ''
             if '}' in root.tag:
                 ns = root.tag.split('}')[0] + '}'
-
-            # Get sample rate and resolution from repbeats attributes
             repbeats_elem = root.find(f'.//{ns}repbeats')
             philips_sr = 1000
             philips_res = 1.0
@@ -1122,7 +1152,6 @@ async def _parse_xml_waveform(xml_path: str, filename: str) -> dict:
                     philips_res = float(repbeats_elem.get('resolution', '1.0'))
                 except ValueError:
                     pass
-
             for repbeat in root.iter(f'{ns}repbeat'):
                 lead_name = repbeat.get('leadname', '')
                 if not lead_name:
@@ -1134,7 +1163,6 @@ async def _parse_xml_waveform(xml_path: str, filename: str) -> dict:
                     raw_bytes = base64.b64decode(''.join(wf_elem.text.split()))
                     num_samples = len(raw_bytes) // 2
                     samples = struct.unpack(f'<{num_samples}h', raw_bytes)
-                    # Convert to mV: sample * resolution (uV) / 1000
                     mv_data = [s * philips_res / 1000.0 for s in samples]
                     if lead_name in standard_leads:
                         leads_data[lead_name] = mv_data
@@ -1143,12 +1171,10 @@ async def _parse_xml_waveform(xml_path: str, filename: str) -> dict:
                         leads_data[lead_name] = mv_data
                 except Exception as e:
                     logger.warning(f"Failed to parse Philips repbeat lead {lead_name}: {e}")
-
             if leads_data:
                 sample_rate = philips_sr
                 available_leads = [l for l in standard_leads if l in leads_data]
                 duration_seconds = samples_per_lead / sample_rate if sample_rate > 0 else 0
-                logger.info(f"Parsed Philips repbeats: {len(leads_data)} leads, {samples_per_lead} samples at {sample_rate}Hz")
                 result = {
                     "success": True,
                     "filename": filename,
