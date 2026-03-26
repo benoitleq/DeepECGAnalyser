@@ -116,13 +116,17 @@ const ProgressBar: React.FC<{
   const config = getStatusConfig(status);
 
   return (
-    <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+    <div className="relative w-full h-3">
+      {/* Background track */}
+      <div className="absolute inset-0 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className={`absolute h-full ${config.bgColor} transition-all duration-500`}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
+      {/* Threshold marker — outside overflow-hidden so it's always visible */}
       <div
-        className={`absolute h-full ${config.bgColor} transition-all duration-500`}
-        style={{ width: `${Math.min(value, 100)}%` }}
-      />
-      <div
-        className="absolute h-full w-0.5 bg-gray-600"
+        className="absolute top-0 h-full w-0.5 bg-gray-700"
         style={{ left: `${threshold}%` }}
         title={thresholdLabel}
       />
